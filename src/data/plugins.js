@@ -45,6 +45,24 @@ export const categories = [
     ]
   },
   {
+    id: 'mosaic',
+    name: '马赛克',
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="4" height="4"/><rect x="10" y="3" width="4" height="4"/><rect x="17" y="3" width="4" height="4"/><rect x="3" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="17" y="10" width="4" height="4"/><rect x="3" y="17" width="4" height="4"/><rect x="10" y="17" width="4" height="4"/><rect x="17" y="17" width="4" height="4"/></svg>`,
+    plugins: [
+      { id: 'basic-mosaic',       name: 'Basic Mosaic',       nameZh: '基础马赛克',   status: 'active' },
+      { id: 'blur-mosaic',        name: 'Blur Mosaic',        nameZh: '模糊马赛克',   status: 'active' },
+      { id: 'brick-mosaic',       name: 'Brick Mosaic',       nameZh: '砖块马赛克',   status: 'active' },
+      { id: 'colorful-mosaic-1',  name: 'Colorful MosaicI',   nameZh: '彩色马赛克 I', status: 'active' },
+      { id: 'colorful-mosaic-2',  name: 'Colorful MosaicII',  nameZh: '彩色马赛克 II',status: 'active' },
+      { id: 'colorful-mosaic-3',  name: 'Colorful MosaicIII', nameZh: '彩色马赛克 III',status: 'active' },
+      { id: 'glass-mosaic-1',     name: 'Glass MosaicI',      nameZh: '玻璃马赛克 I', status: 'active' },
+      { id: 'glass-mosaic-2',     name: 'Glass MosaicII',     nameZh: '玻璃马赛克 II',status: 'active' },
+      { id: 'hexagon-mosaic',     name: 'Hexagon Mosaic',     nameZh: '六边形马赛克', status: 'active' },
+      { id: 'star-mosaic',        name: 'Star Mosaic',        nameZh: '星形马赛克',   status: 'active' },
+      { id: 'radial-blur',        name: 'Radial Blur',        nameZh: '径向模糊',     status: 'active' },
+    ]
+  },
+  {
     id: 'generate',
     name: '生成',
     icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
