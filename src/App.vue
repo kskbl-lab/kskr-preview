@@ -1,6 +1,6 @@
 <template>
-  <div class="app">
-    <TopBar />
+  <div class="app" :class="'theme-' + currentTheme">
+    <TopBar :currentTheme="currentTheme" @set-theme="setTheme" />
     <div class="app-body">
       <Sidebar @select-plugin="onSelectPlugin" />
       <ParamPanel
@@ -49,6 +49,11 @@ import { StarMosaicEffect }       from './effects/StarMosaicEffect.js'
 import { RadialBlurEffect }       from './effects/RadialBlurEffect.js'
 import { DirectionalBlurEffect }  from './effects/DirectionalBlurEffect.js'
 
+// ── 主题 ──────────────────────────────────────
+const currentTheme = ref('dark')
+function setTheme(t) { currentTheme.value = t }
+
+// ── 状态 ──────────────────────────────────────
 const selectedPluginId = ref('wave-blur')
 const compareMode      = ref(false)
 const hasImage         = ref(false)
@@ -57,6 +62,7 @@ const imgW             = ref(0)
 const imgH             = ref(0)
 
 let effect    = null
+let effectCmp = null   // 对比模式的第二个 effect 实例（绑定 effectCanvasCmp）
 let sourceImg = null
 
 // ── 插件元数据 ──────────────────────────────────────
@@ -165,7 +171,10 @@ const currentCategoryName = computed(() => {
 
 const paramValues = ref({ ...PLUGINS_META['wave-blur'].defaults })
 
-watch(paramValues, (v) => { effect?.updateParams(v) }, { deep: true })
+watch(paramValues, (v) => {
+  effect?.updateParams(v)
+  effectCmp?.updateParams(v)
+}, { deep: true })
 
 onMounted(() => {
   nextTick(() => {
@@ -174,23 +183,48 @@ onMounted(() => {
   })
 })
 
+function makeEffect(pluginId, canvas) {
+  const meta = PLUGINS_META[pluginId]
+  if (!meta || !canvas) return null
+  if (pluginId === 'wave-blur') {
+    const e = new WaveBlurringEffect(canvas, null)
+    e.init()
+    return e
+  } else if (meta.EffectClass) {
+    return new meta.EffectClass(canvas)
+  }
+  return null
+}
+
 function initEffect(pluginId) {
   effect?.destroy?.()
-  effect = null
+  effectCmp?.destroy?.()
+  effect = null; effectCmp = null
 
-  const meta = PLUGINS_META[pluginId]
-  if (!meta) return
-  const canvas = previewArea.value?.effectCanvas
-  if (!canvas) return
-
-  if (pluginId === 'wave-blur') {
-    effect = new WaveBlurringEffect(canvas, previewArea.value?.originalCanvas)
-    effect.init()
-  } else if (meta.EffectClass) {
-    effect = new meta.EffectClass(canvas)
-  }
-
+  const ec = previewArea.value?.effectCanvas
+  effect = makeEffect(pluginId, ec)
   if (sourceImg) effect?.loadImage(sourceImg)
+
+  if (compareMode.value) {
+    initEffectCmp(pluginId)
+    drawOriginal()
+  }
+}
+
+function initEffectCmp(pluginId) {
+  effectCmp?.destroy?.()
+  effectCmp = null
+  const ecCmp = previewArea.value?.effectCanvasCmp
+  effectCmp = makeEffect(pluginId, ecCmp)
+  if (sourceImg) effectCmp?.loadImage(sourceImg)
+}
+
+function drawOriginal() {
+  const oc = previewArea.value?.originalCanvas
+  if (!oc || !sourceImg) return
+  oc.width  = imgW.value || sourceImg.naturalWidth || 900
+  oc.height = imgH.value || sourceImg.naturalHeight || 600
+  oc.getContext('2d').drawImage(sourceImg, 0, 0, oc.width, oc.height)
 }
 
 function loadDefaultImage() {
@@ -230,16 +264,18 @@ function setImage(img) {
   imgW.value = img.naturalWidth  || img.width  || 900
   imgH.value = img.naturalHeight || img.height || 600
   hasImage.value = true
-  nextTick(() => effect?.loadImage(img))
+  nextTick(() => {
+    effect?.loadImage(img)
+    if (compareMode.value) {
+      effectCmp?.loadImage(img)
+      drawOriginal()
+    }
+  })
 }
 
 function handleImageUpload(e) {
-  // 兼容原生 input change 事件和 drop 构造的对象
-  const file = e?.target?.files?.[0]
-               || e?.dataTransfer?.files?.[0]
-               || (e?.files?.[0])
+  const file = e?.target?.files?.[0] || e?.dataTransfer?.files?.[0] || e?.files?.[0]
   if (!file) return
-
   const reader = new FileReader()
   reader.onload = (evt) => {
     const img = new Image()
@@ -256,27 +292,12 @@ function resetParams() {
 function toggleCompare() {
   compareMode.value = !compareMode.value
   nextTick(() => {
-    if (selectedPluginId.value === 'wave-blur') {
-      effect?.setCompareMode?.(compareMode.value)
-    } else if (compareMode.value && sourceImg) {
-      // 对比模式：把原图画到 originalCanvas
-      const oc = previewArea.value?.originalCanvas
-      if (oc) {
-        oc.width  = imgW.value
-        oc.height = imgH.value
-        oc.getContext('2d').drawImage(sourceImg, 0, 0)
-      }
-      // 效果画到 effectCanvasCmp
-      const ecCmp = previewArea.value?.effectCanvasCmp
-      if (ecCmp && effect) {
-        const savedCanvas = effect.canvas
-        effect.canvas = ecCmp
-        effect.ctx    = ecCmp.getContext('2d')
-        effect.loadImage(sourceImg)
-        effect.canvas = savedCanvas
-        effect.ctx    = savedCanvas.getContext('2d')
-        effect.loadImage(sourceImg)
-      }
+    if (compareMode.value) {
+      initEffectCmp(selectedPluginId.value)
+      drawOriginal()
+    } else {
+      effectCmp?.destroy?.()
+      effectCmp = null
     }
   })
 }
@@ -289,11 +310,78 @@ function onSelectPlugin(plugin) {
 }
 </script>
 
+<style>
+/* ── 主题 CSS 变量 ─────────────────────────── */
+.theme-dark {
+  --app-bg:        #080808;
+  --topbar-bg:     #0d0d0d;
+  --sidebar-bg:    #0d0d0d;
+  --panel-bg:      #0a0a0a;
+  --canvas-bg:     #080808;
+  --toolbar-bg:    #0a0a0a;
+  --ctrl-bg:       #111;
+  --ctrl-hover:    #151515;
+  --ctrl-active:   #1a1a1a;
+  --border:        #1e1e1e;
+  --border-hover:  #333;
+  --text-primary:  #e0e0e0;
+  --text-dim:      #888;
+  --text-muted:    #444;
+  --upload-bg:     rgba(10,10,10,0.85);
+  --grid-line:     rgba(255,255,255,0.015);
+  --scrollbar:     #222;
+  --logo-rest:     #444;
+}
+
+.theme-gray {
+  --app-bg:        #2e2e2e;
+  --topbar-bg:     #242424;
+  --sidebar-bg:    #272727;
+  --panel-bg:      #252525;
+  --canvas-bg:     #2e2e2e;
+  --toolbar-bg:    #242424;
+  --ctrl-bg:       #333;
+  --ctrl-hover:    #3a3a3a;
+  --ctrl-active:   #404040;
+  --border:        #3a3a3a;
+  --border-hover:  #555;
+  --text-primary:  #f0f0f0;
+  --text-dim:      #aaa;
+  --text-muted:    #777;
+  --upload-bg:     rgba(30,30,30,0.9);
+  --grid-line:     rgba(255,255,255,0.04);
+  --scrollbar:     #444;
+  --logo-rest:     #777;
+}
+
+.theme-light {
+  --app-bg:        #f0f0f0;
+  --topbar-bg:     #ffffff;
+  --sidebar-bg:    #f8f8f8;
+  --panel-bg:      #fafafa;
+  --canvas-bg:     #e8e8e8;
+  --toolbar-bg:    #f5f5f5;
+  --ctrl-bg:       #ebebeb;
+  --ctrl-hover:    #e0e0e0;
+  --ctrl-active:   #d8d8d8;
+  --border:        #ddd;
+  --border-hover:  #aaa;
+  --text-primary:  #111;
+  --text-dim:      #555;
+  --text-muted:    #999;
+  --upload-bg:     rgba(240,240,240,0.9);
+  --grid-line:     rgba(0,0,0,0.04);
+  --scrollbar:     #ccc;
+  --logo-rest:     #aaa;
+}
+</style>
+
 <style scoped>
 .app {
   width: 100vw; height: 100vh;
   display: flex; flex-direction: column;
-  background: #080808; overflow: hidden;
+  background: var(--app-bg, #080808);
+  overflow: hidden;
 }
 .app-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
 </style>

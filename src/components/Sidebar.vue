@@ -86,8 +86,8 @@ function selectPlugin(plugin) {
 <style scoped>
 .sidebar {
   width: 220px;
-  background: #0d0d0d;
-  border-right: 1px solid #1e1e1e;
+  background: var(--sidebar-bg, #0d0d0d);
+  border-right: 1px solid var(--border, #1e1e1e);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -105,7 +105,7 @@ function selectPlugin(plugin) {
 }
 .category-list::-webkit-scrollbar-track { background: transparent; }
 .category-list::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: var(--scrollbar, #2a2a2a);
   border-radius: 2px;
 }
 
@@ -121,15 +121,15 @@ function selectPlugin(plugin) {
 }
 
 .category-header:hover {
-  background: #141414;
+  background: var(--ctrl-hover, #141414);
 }
 
 .category-header.active {
-  background: #141414;
+  background: var(--ctrl-hover, #141414);
 }
 
 .category-icon {
-  color: #555;
+  color: var(--text-muted, #555);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -138,24 +138,24 @@ function selectPlugin(plugin) {
 
 .category-header.active .category-icon,
 .category-header:hover .category-icon {
-  color: #999;
+  color: var(--text-dim, #999);
 }
 
 .category-name {
   flex: 1;
   font-size: 13px;
   font-weight: 500;
-  color: #666;
+  color: var(--text-muted, #666);
   transition: color 0.15s;
 }
 
 .category-header.active .category-name,
 .category-header:hover .category-name {
-  color: #ccc;
+  color: var(--text-primary, #ccc);
 }
 
 .category-arrow {
-  color: #333;
+  color: var(--border-hover, #333);
   display: flex;
   align-items: center;
   transition: transform 0.2s, color 0.15s;
@@ -163,7 +163,7 @@ function selectPlugin(plugin) {
 
 .category-item.expanded .category-arrow {
   transform: rotate(180deg);
-  color: #555;
+  color: var(--text-muted, #555);
 }
 
 /* 插件列表 */
@@ -183,11 +183,11 @@ function selectPlugin(plugin) {
 }
 
 .plugin-item:hover:not(.coming) {
-  background: #111;
+  background: var(--ctrl-bg, #111);
 }
 
 .plugin-item.selected {
-  background: #161616;
+  background: var(--ctrl-active, #161616);
 }
 
 .plugin-item.coming {
@@ -199,13 +199,13 @@ function selectPlugin(plugin) {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #2a2a2a;
+  background: var(--border, #2a2a2a);
   flex-shrink: 0;
   transition: background 0.15s;
 }
 
 .plugin-item.selected .plugin-dot {
-  background: #fff;
+  background: var(--text-primary, #fff);
 }
 
 .plugin-info {
@@ -218,7 +218,7 @@ function selectPlugin(plugin) {
 
 .plugin-name {
   font-size: 12.5px;
-  color: #555;
+  color: var(--text-muted, #555);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -228,33 +228,33 @@ function selectPlugin(plugin) {
 
 .plugin-item.selected .plugin-name,
 .plugin-item:hover:not(.coming) .plugin-name {
-  color: #ccc;
+  color: var(--text-primary, #ccc);
 }
 
 .plugin-name-zh {
   font-size: 11px;
-  color: #333;
+  color: var(--text-muted, #444);
   transition: color 0.15s;
 }
 
 .plugin-item.selected .plugin-name-zh {
-  color: #555;
+  color: var(--text-dim, #555);
 }
 
 .plugin-tag {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 3px;
-  background: #1a1a1a;
-  color: #3a3a3a;
-  border: 1px solid #222;
+  background: var(--ctrl-bg, #1a1a1a);
+  color: var(--text-muted, #3a3a3a);
+  border: 1px solid var(--border, #222);
   flex-shrink: 0;
 }
 
 .active-tag {
-  background: rgba(255,255,255,0.04);
-  color: #ffffff55;
-  border-color: #2a2a2a;
+  background: var(--ctrl-active, rgba(255,255,255,0.04));
+  color: var(--text-dim, #888);
+  border-color: var(--border, #2a2a2a);
 }
 
 /* 动画 */
@@ -272,7 +272,7 @@ function selectPlugin(plugin) {
 /* 底部 */
 .sidebar-footer {
   padding: 14px 16px;
-  border-top: 1px solid #1a1a1a;
+  border-top: 1px solid var(--border, #1a1a1a);
 }
 
 .footer-text {
@@ -280,10 +280,10 @@ function selectPlugin(plugin) {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #333;
+  color: var(--text-muted, #555);
 }
 
 .footer-divider {
-  color: #2a2a2a;
+  color: var(--border, #2a2a2a);
 }
 </style>

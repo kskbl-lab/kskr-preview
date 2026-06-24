@@ -90,8 +90,8 @@ function formatValue(v) {
 <style scoped>
 .param-panel {
   width: 280px;
-  background: #0d0d0d;
-  border-right: 1px solid #1e1e1e;
+  background: var(--panel-bg, #0d0d0d);
+  border-right: 1px solid var(--border, #1e1e1e);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -99,7 +99,7 @@ function formatValue(v) {
 
 .plugin-header {
   padding: 20px 20px 16px;
-  border-bottom: 1px solid #1a1a1a;
+  border-bottom: 1px solid var(--border, #1a1a1a);
 }
 
 .plugin-title-row {
@@ -112,34 +112,34 @@ function formatValue(v) {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 16px;
   font-weight: 600;
-  color: #e8e8e8;
+  color: var(--text-primary, #e8e8e8);
   margin-bottom: 3px;
 }
 
 .plugin-title-zh {
   font-size: 12px;
-  color: #444;
+  color: var(--text-muted, #444);
 }
 
 .btn-icon {
   width: 30px;
   height: 30px;
-  background: #161616;
-  border: 1px solid #222;
+  background: var(--ctrl-active, #161616);
+  border: 1px solid var(--border, #222);
   border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #555;
+  color: var(--text-muted, #555);
   transition: all 0.15s;
   flex-shrink: 0;
 }
 
 .btn-icon:hover {
-  background: #1e1e1e;
-  color: #aaa;
-  border-color: #333;
+  background: var(--ctrl-hover, #1e1e1e);
+  color: var(--text-dim, #aaa);
+  border-color: var(--border-hover, #333);
 }
 
 /* 参数滚动区 */
@@ -152,7 +152,7 @@ function formatValue(v) {
 .params-scroll::-webkit-scrollbar { width: 4px; }
 .params-scroll::-webkit-scrollbar-track { background: transparent; }
 .params-scroll::-webkit-scrollbar-thumb {
-  background: #1e1e1e;
+  background: var(--scrollbar, #1e1e1e);
   border-radius: 2px;
 }
 
@@ -169,27 +169,27 @@ function formatValue(v) {
 
 .param-label {
   font-size: 12.5px;
-  color: #888;
+  color: var(--text-dim, #888);
   font-weight: 500;
 }
 
 .param-value-wrap {
-  background: #141414;
-  border: 1px solid #222;
+  background: var(--ctrl-active, #141414);
+  border: 1px solid var(--border, #222);
   border-radius: 4px;
   padding: 2px 8px;
 }
 
 .param-value {
   font-size: 12px;
-  color: #bbb;
+  color: var(--text-primary, #bbb);
   font-family: 'Space Grotesk', monospace;
   font-weight: 500;
 }
 
 .param-desc {
   font-size: 11px;
-  color: #333;
+  color: var(--text-muted, #444);
   margin-bottom: 8px;
 }
 
@@ -203,7 +203,7 @@ function formatValue(v) {
 .slider-min,
 .slider-max {
   font-size: 10px;
-  color: #2e2e2e;
+  color: var(--text-muted, #555);
   min-width: 18px;
   font-family: 'Space Grotesk', monospace;
 }
@@ -217,7 +217,7 @@ input[type="range"] {
   height: 3px;
   -webkit-appearance: none;
   appearance: none;
-  background: #1e1e1e;
+  background: var(--ctrl-active, #1e1e1e);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -252,7 +252,7 @@ input[type="range"]::-moz-range-thumb {
 /* 底部操作 */
 .panel-actions {
   padding: 16px 20px;
-  border-top: 1px solid #1a1a1a;
+  border-top: 1px solid var(--border, #1a1a1a);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -284,19 +284,19 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .btn-compare {
-  background: #141414;
-  color: #666;
-  border: 1px solid #222;
+  background: var(--ctrl-active, #141414);
+  color: var(--text-dim, #666);
+  border: 1px solid var(--border, #222);
 }
 
 .btn-compare:hover {
-  border-color: #333;
-  color: #aaa;
+  border-color: var(--border-hover, #333);
+  color: var(--text-primary, #aaa);
 }
 
 .btn-compare.active {
-  background: #1a1a1a;
-  color: #ddd;
-  border-color: #444;
+  background: var(--ctrl-hover, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border-color: var(--border-hover, #444);
 }
 </style>

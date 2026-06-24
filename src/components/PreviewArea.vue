@@ -38,7 +38,7 @@
     <!-- 画布区 -->
     <div class="canvas-area" ref="canvasArea">
 
-      <!-- 无图片时：上传提示全屏显示 -->
+      <!-- 无图片：上传占位 -->
       <div v-if="!hasImage" class="upload-placeholder" @click="triggerUpload" @dragover.prevent @drop="onDrop">
         <div class="upload-box">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
@@ -51,37 +51,39 @@
         </div>
       </div>
 
-      <!-- 有图片时：单图 or 对比 -->
+      <!-- 有图片 -->
       <template v-else>
-        <!-- 单图模式 -->
-        <div v-if="!compareMode" class="single-mode" :style="singleModeStyle">
-          <canvas ref="effectCanvas" class="preview-canvas" :style="canvasDisplayStyle"></canvas>
-        </div>
+        <div class="single-mode" ref="singleModeRef" :style="singleModeStyle">
+          <!-- 效果图始终渲染 -->
+          <div class="canvas-wrap" :style="canvasWrapStyle">
+            <!-- 普通模式：仅效果 canvas -->
+            <canvas ref="effectCanvas" class="preview-canvas layer-effect"></canvas>
 
-        <!-- 对比模式 -->
-        <div v-else class="compare-mode-wrap">
-          <div class="compare-slider-wrap" ref="compareWrap">
-            <div class="compare-canvas-bg">
-              <canvas ref="originalCanvas" class="cmp-canvas" :style="canvasDisplayStyle"></canvas>
-            </div>
-            <div class="compare-canvas-fg" :style="{ width: comparePos + '%' }">
-              <canvas ref="effectCanvasCmp" class="cmp-canvas" :style="canvasDisplayStyle"></canvas>
-            </div>
-            <div
-              class="compare-divider"
-              :style="{ left: comparePos + '%' }"
-              @mousedown="startDrag"
-              @touchstart="startDrag"
-            >
-              <div class="divider-line"></div>
-              <div class="divider-handle">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
-                </svg>
+            <!-- 对比模式：原图铺底，效果图用 clip 盖右侧 -->
+            <template v-if="compareMode">
+              <canvas ref="originalCanvas" class="preview-canvas layer-original"></canvas>
+              <div class="compare-clip" :style="{ width: (100 - comparePos) + '%' }">
+                <canvas ref="effectCanvasCmp" class="preview-canvas layer-effect-cmp"></canvas>
               </div>
-            </div>
-            <div class="compare-label compare-label-before">原图</div>
-            <div class="compare-label compare-label-after">效果</div>
+              <!-- 分割线手柄 -->
+              <div
+                class="compare-handle"
+                :style="{ left: (100 - comparePos) + '%' }"
+                @mousedown.stop="startDrag"
+                @touchstart.stop="startDrag"
+              >
+                <div class="handle-line"></div>
+                <div class="handle-knob">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="15 18 9 12 15 6"/>
+                    <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
+                  </svg>
+                </div>
+              </div>
+              <!-- 标签 -->
+              <div class="cmp-label cmp-label-orig" :style="{ right: comparePos + '%' }">原图</div>
+              <div class="cmp-label cmp-label-fx"   :style="{ left: (100 - comparePos) + '%' }">效果</div>
+            </template>
           </div>
         </div>
       </template>
@@ -92,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   compareMode:     { type: Boolean, default: false },
@@ -109,12 +111,12 @@ const effectCanvas    = ref(null)
 const originalCanvas  = ref(null)
 const effectCanvasCmp = ref(null)
 const fileInput       = ref(null)
-const compareWrap     = ref(null)
+const singleModeRef   = ref(null)
 const canvasArea      = ref(null)
 
 const viewMode   = ref('fit')
 const zoom       = ref(100)
-const comparePos = ref(50)
+const comparePos = ref(50)   // 右侧效果区占的百分比
 let isDragging   = false
 
 const viewModes = [
@@ -128,54 +130,46 @@ const viewModes = [
   }
 ]
 
-// canvas 的 CSS 显示样式（控制缩放）
-const canvasDisplayStyle = computed(() => {
+// 外层 single-mode 容器
+const singleModeStyle = computed(() => ({
+  overflow: viewMode.value === 'actual' ? 'auto' : 'hidden',
+}))
+
+// canvas 外层 wrap（控制缩放，以中心为锚点）
+const canvasWrapStyle = computed(() => {
   if (viewMode.value === 'fit') {
     return {
       maxWidth: '100%',
       maxHeight: 'calc(100vh - 200px)',
       width: 'auto',
       height: 'auto',
-      display: 'block',
     }
   }
   return {
-    width: props.imageWidth ? props.imageWidth + 'px' : 'auto',
-    height: props.imageHeight ? props.imageHeight + 'px' : 'auto',
+    width: (props.imageWidth || 900) + 'px',
+    height: (props.imageHeight || 600) + 'px',
     transform: `scale(${zoom.value / 100})`,
-    transformOrigin: 'top left',
-    display: 'block',
+    transformOrigin: 'center center',
   }
 })
 
-const singleModeStyle = computed(() => ({
-  overflow: viewMode.value === 'actual' ? 'auto' : 'hidden',
-}))
-
 defineExpose({ effectCanvas, originalCanvas, effectCanvasCmp })
 
-function triggerUpload() {
-  fileInput.value?.click()
-}
+function triggerUpload() { fileInput.value?.click() }
 
-function onFileChange(e) {
-  emit('upload', e)
-}
+function onFileChange(e) { emit('upload', e) }
 
 function onDrop(e) {
   e.preventDefault()
   const file = e.dataTransfer?.files?.[0]
-  if (file) {
-    // 构造一个合规的 event-like 对象
-    emit('upload', { target: { files: [file] } })
-  }
+  if (file) emit('upload', { target: { files: [file] } })
 }
 
 function changeZoom(delta) {
   zoom.value = Math.min(200, Math.max(25, zoom.value + delta))
 }
 
-// 对比滑块
+// 对比滑块拖拽
 function startDrag(e) {
   e.preventDefault()
   isDragging = true
@@ -193,211 +187,167 @@ function stopDrag() {
   document.removeEventListener('touchend', stopDrag)
 }
 
-function onMouseMove(e) {
-  if (!isDragging) return
-  updateComparePos(e.clientX)
-}
+function onMouseMove(e) { if (isDragging) updatePos(e.clientX) }
+function onTouchMove(e) { if (isDragging) { e.preventDefault(); updatePos(e.touches[0].clientX) } }
 
-function onTouchMove(e) {
-  if (!isDragging) return
-  e.preventDefault()
-  updateComparePos(e.touches[0].clientX)
-}
-
-function updateComparePos(clientX) {
-  const wrap = compareWrap.value
+function updatePos(clientX) {
+  // 找到 canvas-wrap 的 DOM 元素计算位置
+  const wrap = singleModeRef.value?.querySelector('.canvas-wrap')
   if (!wrap) return
   const rect = wrap.getBoundingClientRect()
-  comparePos.value = Math.min(95, Math.max(5, ((clientX - rect.left) / rect.width) * 100))
+  const pct = ((clientX - rect.left) / rect.width) * 100
+  // comparePos = 右侧效果区百分比（100 - 手柄位置）
+  comparePos.value = Math.min(95, Math.max(5, 100 - pct))
 }
 </script>
 
 <style scoped>
 .preview-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #080808;
-  min-width: 0;
-  overflow: hidden;
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--canvas-bg, #080808);
+  min-width: 0; overflow: hidden;
 }
 
 /* 工具栏 */
 .preview-toolbar {
-  height: 44px;
-  border-bottom: 1px solid #1a1a1a;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  flex-shrink: 0;
-  background: #0a0a0a;
+  height: 44px; border-bottom: 1px solid var(--border, #1a1a1a);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; flex-shrink: 0;
+  background: var(--toolbar-bg, #0a0a0a);
 }
 
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
-.breadcrumb-cat    { color: #444; }
-.breadcrumb-sep    { color: #2a2a2a; }
-.breadcrumb-plugin { color: #888; font-weight: 500; }
+.breadcrumb-cat    { color: var(--text-muted, #444); }
+.breadcrumb-sep    { color: var(--border, #2a2a2a); }
+.breadcrumb-plugin { color: var(--text-dim, #888); font-weight: 500; }
 
 .toolbar-right { display: flex; align-items: center; gap: 12px; }
 
 .view-toggle {
-  display: flex;
-  background: #111;
-  border: 1px solid #1e1e1e;
-  border-radius: 6px;
-  overflow: hidden;
+  display: flex; background: var(--ctrl-bg, #111);
+  border: 1px solid var(--border, #1e1e1e); border-radius: 6px; overflow: hidden;
 }
-
 .view-toggle button {
-  padding: 5px 9px;
-  background: transparent;
-  border: none;
-  color: #444;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.15s;
+  padding: 5px 9px; background: transparent; border: none;
+  color: var(--text-muted, #444); cursor: pointer;
+  display: flex; align-items: center; transition: all 0.15s;
 }
-
-.view-toggle button:hover  { color: #888; background: #151515; }
-.view-toggle button.active { color: #ccc; background: #1a1a1a; }
+.view-toggle button:hover  { color: var(--text-dim, #888); background: var(--ctrl-hover, #151515); }
+.view-toggle button.active { color: var(--text-primary, #ccc); background: var(--ctrl-active, #1a1a1a); }
 
 .zoom-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #111;
-  border: 1px solid #1e1e1e;
-  border-radius: 6px;
-  padding: 3px 8px;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--ctrl-bg, #111);
+  border: 1px solid var(--border, #1e1e1e); border-radius: 6px; padding: 3px 8px;
 }
-
 .zoom-control button {
-  background: none; border: none; color: #555;
-  cursor: pointer; display: flex; align-items: center;
-  padding: 2px; transition: color 0.15s;
+  background: none; border: none; color: var(--text-muted, #555);
+  cursor: pointer; display: flex; align-items: center; padding: 2px; transition: color 0.15s;
 }
-.zoom-control button:hover { color: #aaa; }
-.zoom-val { font-size: 11.5px; color: #666; min-width: 34px; text-align: center; font-family: 'Space Grotesk', monospace; }
+.zoom-control button:hover { color: var(--text-primary, #aaa); }
+.zoom-val { font-size: 11.5px; color: var(--text-dim, #666); min-width: 34px; text-align: center; font-family: 'Space Grotesk', monospace; }
 
 /* 画布区 */
 .canvas-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  position: relative;
-  background: radial-gradient(circle at center, #0e0e0e 0%, #080808 100%);
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+  background: var(--canvas-bg, #080808);
 }
-
 .canvas-area::before {
-  content: '';
-  position: absolute; inset: 0;
+  content: ''; position: absolute; inset: 0;
   background-image:
-    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
+    linear-gradient(var(--grid-line, rgba(255,255,255,0.015)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line, rgba(255,255,255,0.015)) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none;
 }
 
 /* 上传占位 */
 .upload-placeholder {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  z-index: 2;
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 2;
 }
-
 .upload-box {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 52px 72px;
-  border: 1px dashed #222; border-radius: 12px;
-  background: rgba(10,10,10,0.85);
-  transition: all 0.2s;
-  color: #333;
+  padding: 52px 72px; border: 1px dashed var(--border, #222); border-radius: 12px;
+  background: var(--upload-bg, rgba(10,10,10,0.85)); transition: all 0.2s;
+  color: var(--text-muted, #333);
 }
+.upload-placeholder:hover .upload-box { border-color: var(--border-hover, #333); color: var(--text-dim, #555); }
+.upload-text { font-size: 14px; color: var(--text-dim, #555); font-weight: 500; }
+.upload-sub  { font-size: 12px; color: var(--text-muted, #333); }
 
-.upload-placeholder:hover .upload-box {
-  border-color: #333;
-  color: #555;
-}
-
-.upload-text { font-size: 14px; color: #555; font-weight: 500; }
-.upload-sub  { font-size: 12px; color: #333; }
-
-/* 单图 */
+/* 单图容器 */
 .single-mode {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  padding: 32px;
-  position: relative; z-index: 1;
+  padding: 32px; position: relative; z-index: 1;
 }
 
-.preview-canvas {
-  border-radius: 4px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 64px rgba(0,0,0,0.6);
-}
-
-/* 对比模式 */
-.compare-mode-wrap {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  padding: 32px;
-  position: relative; z-index: 1;
-}
-
-.compare-slider-wrap {
+/* canvas 外层 wrap（承载缩放+比较） */
+.canvas-wrap {
   position: relative;
-  display: inline-block;
+  display: block;
   overflow: hidden;
   border-radius: 4px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 64px rgba(0,0,0,0.6);
-  cursor: col-resize;
-  user-select: none;
+  line-height: 0;
+  /* fit 模式：自适应容器 */
   max-width: 100%;
   max-height: calc(100vh - 200px);
 }
 
-.compare-canvas-bg { display: block; }
-.cmp-canvas { display: block; }
-
-.compare-canvas-fg {
-  position: absolute; top: 0; left: 0;
-  height: 100%; overflow: hidden;
-}
-.compare-canvas-fg .cmp-canvas {
-  position: absolute; top: 0; left: 0;
+/* canvas 自适应 wrap 大小 */
+.preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
-.compare-divider {
+/* 对比：原图铺底 */
+.layer-original {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+}
+
+/* 对比：效果图裁剪覆盖右侧 */
+.compare-clip {
+  position: absolute; top: 0; right: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.layer-effect-cmp {
+  position: absolute; top: 0; right: 0;
+  width: auto; height: 100%;
+}
+
+/* 分割线手柄 */
+.compare-handle {
   position: absolute; top: 0; bottom: 0;
   transform: translateX(-50%);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  z-index: 10; cursor: col-resize;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 20; cursor: col-resize;
 }
-
-.divider-line {
+.handle-line {
   position: absolute; top: 0; bottom: 0; left: 50%;
-  width: 1px; background: rgba(255,255,255,0.3);
+  width: 2px; background: rgba(255,255,255,0.6);
 }
-
-.divider-handle {
-  width: 34px; height: 34px; background: #fff; border-radius: 50%;
+.handle-knob {
+  width: 36px; height: 36px; background: #fff; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; color: #000;
   box-shadow: 0 2px 12px rgba(0,0,0,0.5);
-  position: relative; z-index: 1; transition: transform 0.15s;
+  position: relative; z-index: 1; transition: transform 0.15s; flex-shrink: 0;
 }
-.compare-divider:hover .divider-handle { transform: scale(1.1); }
+.compare-handle:hover .handle-knob { transform: scale(1.1); }
 
-.compare-label {
-  position: absolute; top: 16px;
-  font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6);
-  background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px;
-  backdrop-filter: blur(4px); pointer-events: none;
+/* 对比标签 */
+.cmp-label {
+  position: absolute; top: 14px;
+  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.55); padding: 3px 10px; border-radius: 4px;
+  backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap;
+  transition: left 0s, right 0s;
 }
-.compare-label-before { left: 12px; }
-.compare-label-after  { right: 12px; }
+.cmp-label-orig { right: auto; transform: translateX(-12px); }
+.cmp-label-fx   { left: auto; transform: translateX(12px); }
 </style>
