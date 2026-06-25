@@ -53,37 +53,49 @@
 
       <!-- 有图片 -->
       <template v-else>
-        <div class="single-mode" ref="singleModeRef" :style="singleModeStyle">
-          <!-- 效果图始终渲染 -->
-          <div class="canvas-wrap" :style="canvasWrapStyle">
-            <!-- 普通模式：仅效果 canvas -->
-            <canvas ref="effectCanvas" class="preview-canvas layer-effect"></canvas>
+        <!-- scroll 容器（actual 模式可滚动） -->
+        <div class="scroll-wrap" :class="{ scrollable: viewMode === 'actual' }">
+          <!-- 居中容器 -->
+          <div class="center-wrap">
+            <!-- 实际画布容器，尺寸=图片原始尺寸*缩放比 -->
+            <div class="canvas-wrap" :style="canvasWrapStyle" ref="canvasWrapRef">
 
-            <!-- 对比模式：原图铺底，效果图用 clip 盖右侧 -->
-            <template v-if="compareMode">
-              <canvas ref="originalCanvas" class="preview-canvas layer-original"></canvas>
-              <div class="compare-clip" :style="{ width: (100 - comparePos) + '%' }">
-                <canvas ref="effectCanvasCmp" class="preview-canvas layer-effect-cmp"></canvas>
-              </div>
-              <!-- 分割线手柄 -->
-              <div
-                class="compare-handle"
-                :style="{ left: (100 - comparePos) + '%' }"
-                @mousedown.stop="startDrag"
-                @touchstart.stop="startDrag"
-              >
-                <div class="handle-line"></div>
-                <div class="handle-knob">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="15 18 9 12 15 6"/>
-                    <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
-                  </svg>
+              <!-- 普通模式：单张效果图 -->
+              <canvas
+                ref="effectCanvas"
+                class="abs-fill"
+                :style="{ display: compareMode ? 'none' : 'block' }"
+              ></canvas>
+
+              <!-- 对比模式：原图铺底 + 效果图裁剪右侧 -->
+              <template v-if="compareMode">
+                <!-- 底层：原图 -->
+                <canvas ref="originalCanvas" class="abs-fill"></canvas>
+                <!-- 右侧裁剪层：效果图 -->
+                <div class="cmp-clip" :style="{ width: (100 - comparePos) + '%' }">
+                  <canvas ref="effectCanvasCmp" class="abs-fill"></canvas>
                 </div>
-              </div>
-              <!-- 标签 -->
-              <div class="cmp-label cmp-label-orig" :style="{ right: comparePos + '%' }">原图</div>
-              <div class="cmp-label cmp-label-fx"   :style="{ left: (100 - comparePos) + '%' }">效果</div>
-            </template>
+                <!-- 分割线 -->
+                <div
+                  class="cmp-handle"
+                  :style="{ left: (100 - comparePos) + '%' }"
+                  @mousedown.stop="startDrag"
+                  @touchstart.stop="startDrag"
+                >
+                  <div class="handle-line"></div>
+                  <div class="handle-knob">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="15 18 9 12 15 6"/>
+                      <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
+                    </svg>
+                  </div>
+                </div>
+                <!-- 标签 -->
+                <div class="cmp-label cmp-label-l">原图</div>
+                <div class="cmp-label cmp-label-r">效果</div>
+              </template>
+
+            </div>
           </div>
         </div>
       </template>
@@ -94,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   compareMode:     { type: Boolean, default: false },
@@ -111,12 +123,12 @@ const effectCanvas    = ref(null)
 const originalCanvas  = ref(null)
 const effectCanvasCmp = ref(null)
 const fileInput       = ref(null)
-const singleModeRef   = ref(null)
+const canvasWrapRef   = ref(null)
 const canvasArea      = ref(null)
 
 const viewMode   = ref('fit')
 const zoom       = ref(100)
-const comparePos = ref(50)   // 右侧效果区占的百分比
+const comparePos = ref(50)
 let isDragging   = false
 
 const viewModes = [
@@ -130,35 +142,33 @@ const viewModes = [
   }
 ]
 
-// 外层 single-mode 容器
-const singleModeStyle = computed(() => ({
-  overflow: viewMode.value === 'actual' ? 'auto' : 'hidden',
-}))
+const imgW = computed(() => props.imageWidth  || 900)
+const imgH = computed(() => props.imageHeight || 600)
 
-// canvas 外层 wrap（控制缩放，以中心为锚点）
+// canvas-wrap 的尺寸样式：fit=缩放适应，actual=按缩放比例定义实际像素尺寸
 const canvasWrapStyle = computed(() => {
   if (viewMode.value === 'fit') {
+    // fit 模式：让 canvas 以原始比例充满容器，不超出
     return {
+      width:  imgW.value + 'px',
+      height: imgH.value + 'px',
       maxWidth: '100%',
-      maxHeight: 'calc(100vh - 200px)',
-      width: 'auto',
-      height: 'auto',
+      maxHeight: '100%',
     }
   }
+  // actual 模式：按缩放比确定真实显示尺寸
+  const w = Math.round(imgW.value * zoom.value / 100)
+  const h = Math.round(imgH.value * zoom.value / 100)
   return {
-    width: (props.imageWidth || 900) + 'px',
-    height: (props.imageHeight || 600) + 'px',
-    transform: `scale(${zoom.value / 100})`,
-    transformOrigin: 'center center',
+    width:  w + 'px',
+    height: h + 'px',
   }
 })
 
 defineExpose({ effectCanvas, originalCanvas, effectCanvasCmp })
 
 function triggerUpload() { fileInput.value?.click() }
-
 function onFileChange(e) { emit('upload', e) }
-
 function onDrop(e) {
   e.preventDefault()
   const file = e.dataTransfer?.files?.[0]
@@ -166,7 +176,7 @@ function onDrop(e) {
 }
 
 function changeZoom(delta) {
-  zoom.value = Math.min(200, Math.max(25, zoom.value + delta))
+  zoom.value = Math.min(400, Math.max(10, zoom.value + delta))
 }
 
 // 对比滑块拖拽
@@ -178,7 +188,6 @@ function startDrag(e) {
   document.addEventListener('mouseup', stopDrag)
   document.addEventListener('touchend', stopDrag)
 }
-
 function stopDrag() {
   isDragging = false
   document.removeEventListener('mousemove', onMouseMove)
@@ -186,17 +195,13 @@ function stopDrag() {
   document.removeEventListener('mouseup', stopDrag)
   document.removeEventListener('touchend', stopDrag)
 }
-
 function onMouseMove(e) { if (isDragging) updatePos(e.clientX) }
 function onTouchMove(e) { if (isDragging) { e.preventDefault(); updatePos(e.touches[0].clientX) } }
-
 function updatePos(clientX) {
-  // 找到 canvas-wrap 的 DOM 元素计算位置
-  const wrap = singleModeRef.value?.querySelector('.canvas-wrap')
+  const wrap = canvasWrapRef.value
   if (!wrap) return
   const rect = wrap.getBoundingClientRect()
-  const pct = ((clientX - rect.left) / rect.width) * 100
-  // comparePos = 右侧效果区百分比（100 - 手柄位置）
+  const pct  = ((clientX - rect.left) / rect.width) * 100
   comparePos.value = Math.min(95, Math.max(5, 100 - pct))
 }
 </script>
@@ -215,14 +220,11 @@ function updatePos(clientX) {
   padding: 0 20px; flex-shrink: 0;
   background: var(--toolbar-bg, #0a0a0a);
 }
-
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .breadcrumb-cat    { color: var(--text-muted, #444); }
 .breadcrumb-sep    { color: var(--border, #2a2a2a); }
 .breadcrumb-plugin { color: var(--text-dim, #888); font-weight: 500; }
-
 .toolbar-right { display: flex; align-items: center; gap: 12px; }
-
 .view-toggle {
   display: flex; background: var(--ctrl-bg, #111);
   border: 1px solid var(--border, #1e1e1e); border-radius: 6px; overflow: hidden;
@@ -234,7 +236,6 @@ function updatePos(clientX) {
 }
 .view-toggle button:hover  { color: var(--text-dim, #888); background: var(--ctrl-hover, #151515); }
 .view-toggle button.active { color: var(--text-primary, #ccc); background: var(--ctrl-active, #1a1a1a); }
-
 .zoom-control {
   display: flex; align-items: center; gap: 6px;
   background: var(--ctrl-bg, #111);
@@ -249,7 +250,7 @@ function updatePos(clientX) {
 
 /* 画布区 */
 .canvas-area {
-  flex: 1; display: flex; align-items: center; justify-content: center;
+  flex: 1; display: flex; align-items: stretch; justify-content: center;
   overflow: hidden; position: relative;
   background: var(--canvas-bg, #080808);
 }
@@ -276,61 +277,80 @@ function updatePos(clientX) {
 .upload-text { font-size: 14px; color: var(--text-dim, #555); font-weight: 500; }
 .upload-sub  { font-size: 12px; color: var(--text-muted, #333); }
 
-/* 单图容器 */
-.single-mode {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  padding: 32px; position: relative; z-index: 1;
+/* scroll 容器 */
+.scroll-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 32px;
+  position: relative; z-index: 1;
+}
+.scroll-wrap.scrollable {
+  overflow: auto;
+  /* actual 模式：内容按中心对齐，超出时可滚动 */
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
-/* canvas 外层 wrap（承载缩放+比较） */
+/* 居中容器（actual 模式下保证内容可居中） */
+.center-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* canvas 外层 wrap */
 .canvas-wrap {
   position: relative;
-  display: block;
-  overflow: hidden;
+  flex-shrink: 0;
   border-radius: 4px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 24px 64px rgba(0,0,0,0.6);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 24px 64px rgba(0,0,0,0.6);
   line-height: 0;
-  /* fit 模式：自适应容器 */
-  max-width: 100%;
-  max-height: calc(100vh - 200px);
 }
 
-/* canvas 自适应 wrap 大小 */
-.preview-canvas {
+/* canvas 填满 wrap */
+.abs-fill {
   display: block;
+  position: absolute;
+  top: 0; left: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
 }
 
-/* 对比：原图铺底 */
-.layer-original {
-  position: absolute; top: 0; left: 0;
+/* 用一个透明占位元素撑开 wrap 高度（保持 canvas 宽高比） */
+.size-placeholder {
+  display: block;
+  width: 100%;
+  /* padding-bottom 由 JS 控制，以保持图片比例 */
+  visibility: hidden;
+}
+
+/* 对比：右侧裁剪层 */
+.cmp-clip {
+  position: absolute; top: 0; right: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.cmp-clip canvas {
+  position: absolute; top: 0; right: 0;
   width: 100%; height: 100%;
 }
 
-/* 对比：效果图裁剪覆盖右侧 */
-.compare-clip {
-  position: absolute; top: 0; right: 0;
-  height: 100%;
-  overflow: hidden;
-}
-.layer-effect-cmp {
-  position: absolute; top: 0; right: 0;
-  width: auto; height: 100%;
-}
-
-/* 分割线手柄 */
-.compare-handle {
+/* 分割线 */
+.cmp-handle {
   position: absolute; top: 0; bottom: 0;
   transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 20; cursor: col-resize;
+  z-index: 20; cursor: col-resize; width: 2px;
 }
 .handle-line {
-  position: absolute; top: 0; bottom: 0; left: 50%;
-  width: 2px; background: rgba(255,255,255,0.6);
+  position: absolute; top: 0; bottom: 0; left: 0;
+  width: 2px; background: rgba(255,255,255,0.7);
 }
 .handle-knob {
   width: 36px; height: 36px; background: #fff; border-radius: 50%;
@@ -338,16 +358,15 @@ function updatePos(clientX) {
   box-shadow: 0 2px 12px rgba(0,0,0,0.5);
   position: relative; z-index: 1; transition: transform 0.15s; flex-shrink: 0;
 }
-.compare-handle:hover .handle-knob { transform: scale(1.1); }
+.cmp-handle:hover .handle-knob { transform: scale(1.1); }
 
 /* 对比标签 */
 .cmp-label {
   position: absolute; top: 14px;
-  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.7);
+  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.75);
   background: rgba(0,0,0,0.55); padding: 3px 10px; border-radius: 4px;
   backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap;
-  transition: left 0s, right 0s;
 }
-.cmp-label-orig { right: auto; transform: translateX(-12px); }
-.cmp-label-fx   { left: auto; transform: translateX(12px); }
+.cmp-label-l { left: 12px; }
+.cmp-label-r { right: 12px; }
 </style>
