@@ -315,35 +315,159 @@ function drawOriginal() {
 }
 
 function loadDefaultImage() {
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-  img.src = '/kskr-preview/demo.jpg'
-  img.onload  = () => setImage(img)
-  img.onerror = () => createPlaceholder()
+  createPlaceholder()
 }
 
 function createPlaceholder() {
+  const W = 1200, H = 675
   const c = document.createElement('canvas')
-  c.width = 900; c.height = 600
+  c.width = W; c.height = H
   const ctx = c.getContext('2d')
-  const g = ctx.createLinearGradient(0, 0, 900, 600)
-  g.addColorStop(0, '#101010'); g.addColorStop(1, '#1c1c1c')
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 900, 600)
-  ctx.strokeStyle = 'rgba(255,255,255,.03)'; ctx.lineWidth = 1
-  for (let x = 0; x <= 900; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 600); ctx.stroke() }
-  for (let y = 0; y <= 600; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(900, y); ctx.stroke() }
-  const radial = ctx.createRadialGradient(450, 300, 20, 450, 300, 260)
-  radial.addColorStop(0, 'rgba(255,255,255,.06)'); radial.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = radial; ctx.fillRect(0, 0, 900, 600)
-  ctx.fillStyle = 'rgba(255,255,255,.18)'
-  ctx.font = 'bold 36px "Space Grotesk", sans-serif'
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText('KSkr', 450, 278)
-  ctx.font = '15px "Inter", sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.08)'
-  ctx.fillText('上传图片以开始预览', 450, 326)
+
+  // ── 背景 ───────────────────────────────────────
+  const bg = ctx.createLinearGradient(0, 0, 0, H)
+  bg.addColorStop(0,   '#06060f')
+  bg.addColorStop(0.5, '#0a0716')
+  bg.addColorStop(1,   '#000005')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, W, H)
+
+  // ── 光晕球 ─────────────────────────────────────
+  const orbs = [
+    { x: 0.18*W, y: 0.28*H, r: 380, c0: 'rgba(110,50,220,0.45)' },
+    { x: 0.78*W, y: 0.55*H, r: 340, c0: 'rgba(220,65,55,0.42)'  },
+    { x: 0.52*W, y: 0.85*H, r: 300, c0: 'rgba(30,175,145,0.38)' },
+    { x: 0.88*W, y: 0.1*H,  r: 220, c0: 'rgba(210,155,25,0.38)' },
+    { x: 0.42*W, y: 0.18*H, r: 180, c0: 'rgba(60,130,255,0.32)' },
+  ]
+  for (const o of orbs) {
+    const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r)
+    g.addColorStop(0, o.c0); g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
+  }
+
+  // ── 地平线渐变遮罩 ─────────────────────────────
+  const horizon = ctx.createLinearGradient(0, H*0.52, 0, H*0.72)
+  horizon.addColorStop(0, 'rgba(180,80,255,0.18)')
+  horizon.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = horizon; ctx.fillRect(0, H*0.52, W, H*0.5)
+
+  // ── 透视网格（地面）─────────────────────────────
+  ctx.save()
+  const vp = { x: W/2, y: H*0.58 } // 消失点
+  ctx.strokeStyle = 'rgba(180,80,255,0.18)'
+  ctx.lineWidth = 1
+  // 横线
+  for (let i = 0; i <= 12; i++) {
+    const t  = i / 12
+    const yt = H*0.58 + (H - H*0.58) * (t * t)
+    const xw = (W/2) * (0.02 + 0.98*t*t)
+    ctx.beginPath(); ctx.moveTo(vp.x - xw, yt); ctx.lineTo(vp.x + xw, yt); ctx.stroke()
+  }
+  // 纵线（向消失点收束）
+  for (let i = -8; i <= 8; i++) {
+    const xEnd = W/2 + i * (W / 16)
+    ctx.beginPath(); ctx.moveTo(vp.x, vp.y); ctx.lineTo(xEnd, H); ctx.stroke()
+  }
+  ctx.restore()
+
+  // ── 星空 ──────────────────────────────────────
+  const rng = mulberry32(42)
+  for (let i = 0; i < 160; i++) {
+    const x = rng() * W, y = rng() * H * 0.62
+    const r = rng() * 1.4 + 0.3
+    const a = rng() * 0.6 + 0.2
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2)
+    ctx.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`; ctx.fill()
+  }
+
+  // ── 太阳 / 霓虹圆 ──────────────────────────────
+  const sx = W/2, sy = H*0.58
+  // glow ring
+  for (let ri = 5; ri >= 1; ri--) {
+    const g2 = ctx.createRadialGradient(sx, sy, 0, sx, sy, 90 + ri*28)
+    g2.addColorStop(0, `rgba(255,80,180,${0.06*ri})`)
+    g2.addColorStop(1, 'rgba(255,80,180,0)')
+    ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H)
+  }
+  // Sun body gradient
+  const sunG = ctx.createRadialGradient(sx, sy, 0, sx, sy, 68)
+  sunG.addColorStop(0,   '#fff9f4')
+  sunG.addColorStop(0.3, '#ffd580')
+  sunG.addColorStop(0.7, '#ff7040')
+  sunG.addColorStop(1,   '#e0205a')
+  ctx.fillStyle = sunG
+  ctx.beginPath(); ctx.arc(sx, sy, 68, 0, Math.PI*2); ctx.fill()
+  // Scanlines on sun
+  ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, 68, 0, Math.PI*2); ctx.clip()
+  ctx.strokeStyle = 'rgba(6,6,15,0.4)'; ctx.lineWidth = 5
+  for (let ly = sy-68; ly <= sy+68; ly += 11) {
+    ctx.beginPath(); ctx.moveTo(sx-70, ly); ctx.lineTo(sx+70, ly); ctx.stroke()
+  }
+  ctx.restore()
+
+  // ── 几何装饰线框 ──────────────────────────────
+  ctx.strokeStyle = 'rgba(100,200,255,0.15)'; ctx.lineWidth = 1
+  // 大菱形
+  ctx.beginPath()
+  ctx.moveTo(W*0.78, H*0.12); ctx.lineTo(W*0.92, H*0.32)
+  ctx.lineTo(W*0.78, H*0.52); ctx.lineTo(W*0.64, H*0.32); ctx.closePath()
+  ctx.stroke()
+  // 小矩形
+  ctx.strokeStyle = 'rgba(180,80,255,0.2)'; ctx.lineWidth = 1
+  ctx.strokeRect(W*0.06, H*0.1, W*0.2, H*0.35)
+  ctx.strokeStyle = 'rgba(180,80,255,0.1)'; ctx.lineWidth = 0.5
+  ctx.strokeRect(W*0.08, H*0.13, W*0.16, H*0.29)
+  // 右下角装饰方块
+  ctx.strokeStyle = 'rgba(30,210,160,0.18)'; ctx.lineWidth = 1
+  ctx.strokeRect(W*0.75, H*0.68, W*0.18, H*0.22)
+
+  // ── 扫描线（全局微质感）──────────────────────
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'
+  for (let y = 0; y < H; y += 3) { ctx.fillRect(0, y, W, 1) }
+
+  // ── 品牌文字 ──────────────────────────────────
+  // 大字
+  ctx.save()
+  ctx.textBaseline = 'alphabetic'
+  ctx.font = 'bold 110px "Space Grotesk","Inter",sans-serif'
+  ctx.textAlign = 'left'
+  const textGrad = ctx.createLinearGradient(W*0.08, 0, W*0.5, 0)
+  textGrad.addColorStop(0, 'rgba(255,255,255,0.22)')
+  textGrad.addColorStop(1, 'rgba(255,255,255,0.06)')
+  ctx.fillStyle = textGrad
+  ctx.fillText('KSkr', W*0.08, H*0.46)
+  ctx.restore()
+
+  // 副标题
+  ctx.save()
+  ctx.font = '18px "Inter",sans-serif'
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255,255,255,0.1)'
+  ctx.fillText('AE PLUGIN PREVIEW  ·  上传图片以开始预览效果', W*0.08, H*0.54)
+  ctx.restore()
+
+  // 右下角版本标
+  ctx.save()
+  ctx.font = '13px monospace'
+  ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+  ctx.fillText('KSkr Studio', W*0.97, H*0.96)
+  ctx.restore()
+
   const img = new Image()
   img.onload = () => setImage(img)
   img.src = c.toDataURL()
+}
+
+// 确定性伪随机（种子42保证每次一样）
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed)
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
 }
 
 function setImage(img) {
