@@ -5,10 +5,10 @@ export const categories = [
     name: '光效',
     icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
     plugins: [
-      { id: 'lens-flare', name: 'LensFlare', nameZh: '镜头光晕', status: 'coming' },
-      { id: 'light-leak', name: 'LightLeak', nameZh: '漏光效果', status: 'coming' },
-      { id: 'glow-bloom', name: 'GlowBloom', nameZh: '辉光绽放', status: 'coming' },
-      { id: 'neon-glow',  name: 'NeonGlow',  nameZh: '霓虹发光', status: 'coming' },
+      { id: 'edge-glow',    name: 'EdgeGlow',    nameZh: '边缘辉光',   status: 'active' },
+      { id: 'enlargement',  name: 'Enlargement', nameZh: '局部放大',   status: 'active' },
+      { id: 'shaft-light',  name: 'ShaftLight',  nameZh: '光柱',       status: 'active' },
+      { id: 'overall-glow', name: 'OverallGlow', nameZh: '泛光',       status: 'active' },
     ]
   },
   {
@@ -16,10 +16,11 @@ export const categories = [
     name: '画面扭曲',
     icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8"/><path d="M3 12c0 2.2 3.6 4 8 4s8-1.8 8-4"/><path d="M3 12c0-2.2 3.6-4 8-4s8 1.8 8 4"/></svg>`,
     plugins: [
-      { id: 'wave-blur', name: 'WaveBlurring', nameZh: '波形模糊',  status: 'active' },
-      { id: 'ripple',    name: 'RippleWarp',   nameZh: '涟漪扭曲',  status: 'coming' },
-      { id: 'liquid',    name: 'LiquidMorph',  nameZh: '液态变形',  status: 'coming' },
-      { id: 'glitch',    name: 'GlitchWarp',   nameZh: '故障扭曲',  status: 'coming' },
+      { id: 'wave-blur',      name: 'WaveBlurring',   nameZh: '波形模糊',  status: 'active' },
+      { id: 'cc-lens',        name: 'CCLens',         nameZh: '鱼眼',      status: 'active' },
+      { id: 'ripple',         name: 'Ripple',         nameZh: '波纹',      status: 'active' },
+      { id: 'wave-warp',      name: 'WaveWarp',       nameZh: '波形变形',  status: 'active' },
+      { id: 'twirl-distort',  name: 'TwirlDistort',   nameZh: '旋转扭曲',  status: 'active' },
     ]
   },
   {

@@ -56,6 +56,14 @@ import { NewsprintEffect }        from './effects/NewsprintEffect.js'
 import { CartoonEffect }          from './effects/CartoonEffect.js'
 import { FilmSoftLightEffect }    from './effects/FilmSoftLightEffect.js'
 import { ComicEffect }            from './effects/ComicEffect.js'
+import { CCLensEffect }           from './effects/CCLensEffect.js'
+import { RippleEffect }           from './effects/RippleEffect.js'
+import { WaveWarpEffect }         from './effects/WaveWarpEffect.js'
+import { TwirlDistortEffect }     from './effects/TwirlDistortEffect.js'
+import { EdgeGlowEffect }         from './effects/EdgeGlowEffect.js'
+import { EnlargementEffect }      from './effects/EnlargementEffect.js'
+import { ShaftLightEffect }       from './effects/ShaftLightEffect.js'
+import { OverallGlowEffect }      from './effects/OverallGlowEffect.js'
 
 // ── 主题 ──────────────────────────────────────
 const currentTheme = ref('dark')
@@ -221,6 +229,101 @@ const PLUGINS_META = {
       { key: 'color1',    label: 'Color1',    desc: '高光色相 (0-360°)',        min: 0, max: 360, step: 1 },
       { key: 'color2',    label: 'Color2',    desc: '阴影色相 (0-360°)',        min: 0, max: 360, step: 1 },
       { key: 'gridNum',   label: 'GridNum',   desc: '网格密度',                 min: 0, max: 1, step: 0.01 },
+    ]
+  },
+  // ── 画面扭曲 ─────────────────────────────────────
+  'cc-lens': {
+    name: 'CCLens', nameZh: '鱼眼',
+    EffectClass: CCLensEffect,
+    defaults: { centerX: 0.5, centerY: 0.39, size: 76, convergence: 20 },
+    params: [
+      { key: 'centerX',     label: 'CenterX',     desc: '镜头中心 X',           min: 0, max: 1, step: 0.01 },
+      { key: 'centerY',     label: 'CenterY',     desc: '镜头中心 Y',           min: 0, max: 1, step: 0.01 },
+      { key: 'size',        label: 'Size',        desc: '镜头大小',             min: 0, max: 200 },
+      { key: 'convergence', label: 'Convergence', desc: '汇聚 (+凸起 / -凹陷)', min: -100, max: 100 },
+    ]
+  },
+  'ripple': {
+    name: 'Ripple', nameZh: '波纹',
+    EffectClass: RippleEffect,
+    defaults: { radius: 100, waveSpeed: 4.9, waveWidth: 55.1, waveHeight: 1.0, wavePhase: 0 },
+    params: [
+      { key: 'radius',      label: '半径',      desc: '波纹影响半径',     min: 0,   max: 200 },
+      { key: 'waveWidth',   label: '波形宽度',  desc: '相邻波峰间距',     min: 1,   max: 100, step: 0.1 },
+      { key: 'waveHeight',  label: '波形高度',  desc: '波纹位移幅度',     min: 0,   max: 5, step: 0.1 },
+      { key: 'wavePhase',   label: '波纹相',    desc: '波纹起始相位 (°)', min: 0,   max: 360, step: 1 },
+    ]
+  },
+  'wave-warp': {
+    name: 'WaveWarp', nameZh: '波形变形',
+    EffectClass: WaveWarpEffect,
+    defaults: { waveType: 0, waveHeight: 10, waveWidth: 40, direction: 90, waveSpeed: 1.0, phase: 0 },
+    params: [
+      { key: 'waveType',   label: '波浪类型',  desc: '0=正弦 1=方波 2=三角', min: 0, max: 2, step: 1 },
+      { key: 'waveHeight', label: '波形高度',  desc: '位移幅度',             min: 0, max: 100, step: 0.5 },
+      { key: 'waveWidth',  label: '波形宽度',  desc: '波长（像素比）',       min: 1, max: 200, step: 1 },
+      { key: 'direction',  label: '方向',      desc: '波形传播方向 (°)',     min: 0, max: 360, step: 1 },
+      { key: 'phase',      label: '相位',      desc: '波形起始相位 (°)',     min: 0, max: 360, step: 1 },
+    ]
+  },
+  'twirl-distort': {
+    name: 'TwirlDistort', nameZh: '旋转扭曲',
+    EffectClass: TwirlDistortEffect,
+    defaults: { centerX: 0.5, centerY: 0.5, radius: 80, angle: 120, smoothness: 60 },
+    params: [
+      { key: 'centerX',    label: 'CenterX',    desc: '旋转中心 X',     min: 0, max: 1, step: 0.01 },
+      { key: 'centerY',    label: 'CenterY',    desc: '旋转中心 Y',     min: 0, max: 1, step: 0.01 },
+      { key: 'radius',     label: 'Radius',     desc: '影响半径',       min: 0, max: 200 },
+      { key: 'angle',      label: 'Angle',      desc: '扭曲角度 (°)',   min: -360, max: 360, step: 1 },
+      { key: 'smoothness', label: 'Smoothness', desc: '边缘过渡平滑度', min: 0, max: 100 },
+    ]
+  },
+  // ── 光效 ─────────────────────────────────────
+  'edge-glow': {
+    name: 'EdgeGlow', nameZh: '边缘辉光',
+    EffectClass: EdgeGlowEffect,
+    defaults: { glowCenterX: 0.5, glowCenterY: 0.5, glowIntensity: 50, glowDensity: 60 },
+    params: [
+      { key: 'glowCenterX',  label: 'GlowCenterX', desc: '光源中心 X',    min: 0, max: 1, step: 0.01 },
+      { key: 'glowCenterY',  label: 'GlowCenterY', desc: '光源中心 Y',    min: 0, max: 1, step: 0.01 },
+      { key: 'glowIntensity',label: 'Intensity',   desc: '辉光亮度',      min: 0, max: 100 },
+      { key: 'glowDensity',  label: 'Density',     desc: '辉光扩散密度',  min: 0, max: 100 },
+    ]
+  },
+  'enlargement': {
+    name: 'Enlargement', nameZh: '局部放大',
+    EffectClass: EnlargementEffect,
+    defaults: { shape: 0, centerX: 0.5, centerY: 0.5, magnification: 108, size: 154, feather: 71 },
+    params: [
+      { key: 'shape',         label: 'Shape',         desc: '形状 (0=圆形 1=方形)', min: 0, max: 1, step: 1 },
+      { key: 'centerX',       label: 'CenterX',       desc: '放大中心 X',           min: 0, max: 1, step: 0.01 },
+      { key: 'centerY',       label: 'CenterY',       desc: '放大中心 Y',           min: 0, max: 1, step: 0.01 },
+      { key: 'magnification', label: 'Magnification', desc: '放大倍数 (%)',          min: 50, max: 400 },
+      { key: 'size',          label: 'Size',          desc: '镜头大小',             min: 0, max: 300 },
+      { key: 'feather',       label: 'Feather',       desc: '边缘羽化',             min: 0, max: 100 },
+    ]
+  },
+  'shaft-light': {
+    name: 'ShaftLight', nameZh: '光柱',
+    EffectClass: ShaftLightEffect,
+    defaults: { threshold: 0.2, strength: 1.82, length: 1.0, centerX: 0.5, centerY: 0.5 },
+    params: [
+      { key: 'threshold', label: 'Threshold', desc: '亮度提取阈值',  min: 0,   max: 1, step: 0.01 },
+      { key: 'strength',  label: 'Strength',  desc: '光柱强度',      min: 0,   max: 5, step: 0.01 },
+      { key: 'length',    label: 'Length',    desc: '光线延伸长度',  min: 0,   max: 2, step: 0.01 },
+      { key: 'centerX',   label: 'CenterX',   desc: '光源中心 X',   min: 0,   max: 1, step: 0.01 },
+      { key: 'centerY',   label: 'CenterY',   desc: '光源中心 Y',   min: 0,   max: 1, step: 0.01 },
+    ]
+  },
+  'overall-glow': {
+    name: 'OverallGlow', nameZh: '泛光',
+    EffectClass: OverallGlowEffect,
+    defaults: { threshold: 60, glowRadius: 40, glowStrength: 60, glowColor: 0 },
+    params: [
+      { key: 'threshold',   label: 'Threshold',   desc: '高光提取阈值',           min: 0, max: 100 },
+      { key: 'glowRadius',  label: 'GlowRadius',  desc: '光晕扩散半径',           min: 0, max: 100 },
+      { key: 'glowStrength',label: 'GlowStrength',desc: '光晕强度',               min: 0, max: 100 },
+      { key: 'glowColor',   label: 'GlowColor',   desc: '光晕色调 (0=白 1=暖 2=冷)', min: 0, max: 2, step: 1 },
     ]
   },
 }
