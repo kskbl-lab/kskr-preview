@@ -5,8 +5,28 @@
         <span class="logo-k">K</span><span class="logo-rest">Skr</span>
       </div>
       <div class="topbar-divider"></div>
-      <span class="topbar-subtitle">AE Plugin Preview</span>
+
+      <!-- 导航 Tab -->
+      <nav class="topbar-nav">
+        <button
+          class="nav-tab"
+          :class="{ active: currentRoute === '/' }"
+          @click="$emit('nav', '/')"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          插件预览
+        </button>
+        <button
+          class="nav-tab"
+          :class="{ active: currentRoute === '/convert' }"
+          @click="$emit('nav', '/convert')"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          视频素材转换
+        </button>
+      </nav>
     </div>
+
     <div class="topbar-right">
       <a href="https://kskr.kuaishou.com" target="_blank" class="topbar-link">文档</a>
       <a href="#" class="topbar-link">更新日志</a>
@@ -32,8 +52,11 @@
 </template>
 
 <script setup>
-defineProps({ currentTheme: { type: String, default: 'dark' } })
-defineEmits(['set-theme'])
+defineProps({
+  currentTheme: { type: String, default: 'dark' },
+  currentRoute: { type: String, default: '/' },
+})
+defineEmits(['set-theme', 'nav'])
 
 const themes = [
   { id: 'dark',  label: '黑色',  color: '#111' },
@@ -50,7 +73,9 @@ const themes = [
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 24px; flex-shrink: 0; z-index: 100;
 }
-.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-left  { display: flex; align-items: center; gap: 16px; }
+.topbar-right { display: flex; align-items: center; gap: 20px; }
+
 .logo {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 20px; font-weight: 700; letter-spacing: -0.5px;
@@ -58,13 +83,28 @@ const themes = [
 }
 .logo-k   { color: var(--text-primary, #fff); }
 .logo-rest { color: var(--text-muted, #555); }
+
 .topbar-divider { width: 1px; height: 18px; background: var(--border, #2a2a2a); }
-.topbar-subtitle {
-  font-size: 13px; color: var(--text-muted, #555);
-  font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.3px;
+
+/* 导航 tab */
+.topbar-nav { display: flex; align-items: center; gap: 2px; }
+.nav-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; background: transparent; border: none;
+  border-radius: 6px; font-size: 13px;
+  color: var(--text-muted, #555); cursor: pointer;
+  transition: all 0.15s; font-family: inherit;
 }
-.topbar-right { display: flex; align-items: center; gap: 20px; }
-.topbar-link { font-size: 13px; color: var(--text-dim, #666); text-decoration: none; transition: color 0.2s; }
+.nav-tab:hover { color: var(--text-dim, #888); background: var(--ctrl-hover, #151515); }
+.nav-tab.active {
+  color: var(--text-primary, #ddd);
+  background: var(--ctrl-active, #1a1a1a);
+}
+
+.topbar-link {
+  font-size: 13px; color: var(--text-dim, #666);
+  text-decoration: none; transition: color 0.2s;
+}
 .topbar-link:hover { color: var(--text-primary, #ccc); }
 
 /* 主题切换 */
@@ -79,8 +119,7 @@ const themes = [
   border: 2px solid transparent;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; background: transparent;
-  transition: border-color 0.15s, transform 0.15s;
-  padding: 0;
+  transition: border-color 0.15s, transform 0.15s; padding: 0;
 }
 .theme-btn:hover  { transform: scale(1.15); }
 .theme-btn.active { border-color: var(--text-primary, #fff); }
