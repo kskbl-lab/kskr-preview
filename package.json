@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "gif.js": "^0.2.0",
     "jszip": "^3.10.1",
     "three": "^0.162.0",
     "vue": "^3.4.21",
