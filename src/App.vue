@@ -48,6 +48,11 @@ import { HexagonMosaicEffect }    from './effects/HexagonMosaicEffect.js'
 import { StarMosaicEffect }       from './effects/StarMosaicEffect.js'
 import { RadialBlurEffect }       from './effects/RadialBlurEffect.js'
 import { DirectionalBlurEffect }  from './effects/DirectionalBlurEffect.js'
+import { EngraveEffect }          from './effects/EngraveEffect.js'
+import { NewsprintEffect }        from './effects/NewsprintEffect.js'
+import { CartoonEffect }          from './effects/CartoonEffect.js'
+import { FilmSoftLightEffect }    from './effects/FilmSoftLightEffect.js'
+import { ComicEffect }            from './effects/ComicEffect.js'
 
 // ── 主题 ──────────────────────────────────────
 const currentTheme = ref('dark')
@@ -157,6 +162,62 @@ const PLUGINS_META = {
     EffectClass: StarMosaicEffect,
     defaults: { intensity: 50 },
     params: [{ key: 'intensity', label: 'Intensity', desc: '星形大小', min: 1, max: 100 }]
+  },
+  'engrave': {
+    name: 'Engrave', nameZh: '雕刻',
+    EffectClass: EngraveEffect,
+    defaults: { strength: 2.9 },
+    params: [{ key: 'strength', label: 'Strength', desc: '雕刻强度', min: 0, max: 10, step: 0.1 }]
+  },
+  'newsprint': {
+    name: 'Newsprint', nameZh: '报纸印刷',
+    EffectClass: NewsprintEffect,
+    defaults: { colorModel: 2, pattern: 2, period: 12.7, angle: 75, antiAlias: 16, turbulence: 0, blocksize: -1, angleBoost: 0 },
+    params: [
+      { key: 'colorModel', label: 'ColorModel',  desc: '颜色模式 (0=黑白 1=彩色 2=灰度半调)', min: 0, max: 2, step: 1 },
+      { key: 'pattern',    label: 'Pattern',     desc: '图案类型 (0=圆点 1=线条 2=方块)',      min: 0, max: 2, step: 1 },
+      { key: 'period',     label: 'Period',      desc: '网格周期大小',  min: 1, max: 30, step: 0.1 },
+      { key: 'angle',      label: 'Angle',       desc: '网格旋转角度',  min: 0, max: 180, step: 1 },
+      { key: 'turbulence', label: 'Turbulence',  desc: '扰动变形',      min: 0, max: 5, step: 0.1 },
+      { key: 'blocksize',  label: 'Blocksize',   desc: '图案缩放 (-2~2)', min: -2, max: 2, step: 0.1 },
+      { key: 'angleBoost', label: 'AngleBoost',  desc: '额外角度叠加',  min: 0, max: 5, step: 0.1 },
+    ]
+  },
+  'cartoon': {
+    name: 'Cartoon', nameZh: '卡通',
+    EffectClass: CartoonEffect,
+    defaults: { render: 2, detailRadius: 10.6, detailThreshold: 10, shadingSteps: 10, shadingSmoothness: 10, edgeThreshold: 1, edgeWidth: 2.5, edgeOpacity: 0.26 },
+    params: [
+      { key: 'render',            label: 'Render',            desc: '渲染模式 (0=仅填色 1=仅边缘 2=填色+边缘)', min: 0, max: 2, step: 1 },
+      { key: 'detailRadius',      label: 'DetailRadius',      desc: '细节平滑半径', min: 1, max: 30, step: 0.1 },
+      { key: 'detailThreshold',   label: 'DetailThreshold',   desc: '细节阈值',     min: 0, max: 20, step: 0.1 },
+      { key: 'shadingSteps',      label: 'ShadingSteps',      desc: '色阶数量',     min: 2, max: 16, step: 1 },
+      { key: 'shadingSmoothness', label: 'ShadingSmoothness', desc: '色阶过渡平滑', min: 0, max: 20, step: 0.1 },
+      { key: 'edgeThreshold',     label: 'EdgeThreshold',     desc: '边缘检测阈值', min: 0, max: 5, step: 0.1 },
+      { key: 'edgeWidth',         label: 'EdgeWidth',         desc: '边缘线宽度',   min: 0, max: 8, step: 0.1 },
+      { key: 'edgeOpacity',       label: 'EdgeOpacity',       desc: '边缘线透明度', min: 0, max: 1, step: 0.01 },
+    ]
+  },
+  'film-soft-light': {
+    name: 'FilmSoftLight', nameZh: '胶片柔光',
+    EffectClass: FilmSoftLightEffect,
+    defaults: { lightColor: 50, lightRange: 73, lightIntensity: 50 },
+    params: [
+      { key: 'lightColor',     label: 'LightColor',     desc: '光色偏移 (0=冷蓝 100=暖橙)', min: 0, max: 100 },
+      { key: 'lightRange',     label: 'LightRange',     desc: '光晕扩散范围',               min: 0, max: 100 },
+      { key: 'lightIntensity', label: 'LightIntensity', desc: '光晕强度',                   min: 0, max: 100 },
+    ]
+  },
+  'comic': {
+    name: 'Comic', nameZh: '漫画',
+    EffectClass: ComicEffect,
+    defaults: { comicType: 0, color1: 300, color2: 300, gridNum: 0.14 },
+    params: [
+      { key: 'comicType', label: 'ComicType', desc: '漫画类型 (0=黑白 1=彩色)', min: 0, max: 1, step: 1 },
+      { key: 'color1',    label: 'Color1',    desc: '高光色相 (0-360°)',        min: 0, max: 360, step: 1 },
+      { key: 'color2',    label: 'Color2',    desc: '阴影色相 (0-360°)',        min: 0, max: 360, step: 1 },
+      { key: 'gridNum',   label: 'GridNum',   desc: '网格密度',                 min: 0, max: 1, step: 0.01 },
+    ]
   },
 }
 

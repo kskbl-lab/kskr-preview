@@ -38,7 +38,7 @@
     <!-- 画布区 -->
     <div class="canvas-area" ref="canvasArea">
 
-      <!-- 无图片：上传占位 -->
+      <!-- 上传占位（hasImage=false 时显示在最上层） -->
       <div v-if="!hasImage" class="upload-placeholder" @click="triggerUpload" @dragover.prevent @drop="onDrop">
         <div class="upload-box">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
@@ -51,54 +51,45 @@
         </div>
       </div>
 
-      <!-- 有图片 -->
-      <template v-else>
-        <!-- scroll 容器（actual 模式可滚动） -->
-        <div class="scroll-wrap" :class="{ scrollable: viewMode === 'actual' }">
-          <!-- 居中容器 -->
-          <div class="center-wrap">
-            <!-- 实际画布容器，尺寸=图片原始尺寸*缩放比 -->
-            <div class="canvas-wrap" :style="canvasWrapStyle" ref="canvasWrapRef">
+      <!-- scroll 容器（actual 模式可滚动），hasImage=false 时不可见但 canvas 仍在 DOM -->
+      <div class="scroll-wrap" :class="{ scrollable: viewMode === 'actual', hidden: !hasImage }">
+        <div class="center-wrap">
+          <!-- canvas 外层 wrap，尺寸由样式控制 -->
+          <div class="canvas-wrap" :style="canvasWrapStyle" ref="canvasWrapRef">
 
-              <!-- 普通模式：单张效果图 -->
-              <canvas
-                ref="effectCanvas"
-                class="abs-fill"
-                :style="{ display: compareMode ? 'none' : 'block' }"
-              ></canvas>
+            <!-- 普通模式：效果 canvas（对比模式时隐藏） -->
+            <canvas ref="effectCanvas" class="abs-fill" :style="{ opacity: compareMode ? 0 : 1 }"></canvas>
 
-              <!-- 对比模式：原图铺底 + 效果图裁剪右侧 -->
-              <template v-if="compareMode">
-                <!-- 底层：原图 -->
-                <canvas ref="originalCanvas" class="abs-fill"></canvas>
-                <!-- 右侧裁剪层：效果图 -->
-                <div class="cmp-clip" :style="{ width: (100 - comparePos) + '%' }">
-                  <canvas ref="effectCanvasCmp" class="abs-fill"></canvas>
+            <!-- 对比模式：原图铺底 + 效果图裁剪右侧 -->
+            <template v-if="compareMode">
+              <canvas ref="originalCanvas" class="abs-fill"></canvas>
+              <div class="cmp-clip" :style="{ width: (100 - comparePos) + '%' }">
+                <canvas ref="effectCanvasCmp" class="abs-fill"></canvas>
+              </div>
+              <!-- 分割线手柄 -->
+              <div
+                class="cmp-handle"
+                :style="{ left: (100 - comparePos) + '%' }"
+                @mousedown.stop="startDrag"
+                @touchstart.stop.prevent="startDrag"
+              >
+                <div class="handle-line"></div>
+                <div class="handle-knob">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="15 18 9 12 15 6"/>
+                    <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
+                  </svg>
                 </div>
-                <!-- 分割线 -->
-                <div
-                  class="cmp-handle"
-                  :style="{ left: (100 - comparePos) + '%' }"
-                  @mousedown.stop="startDrag"
-                  @touchstart.stop="startDrag"
-                >
-                  <div class="handle-line"></div>
-                  <div class="handle-knob">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <polyline points="15 18 9 12 15 6"/>
-                      <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
-                    </svg>
-                  </div>
-                </div>
-                <!-- 标签 -->
-                <div class="cmp-label cmp-label-l">原图</div>
-                <div class="cmp-label cmp-label-r">效果</div>
-              </template>
+              </div>
+              <!-- 标签 -->
+              <div class="cmp-label cmp-label-l">原图</div>
+              <div class="cmp-label cmp-label-r">效果</div>
+            </template>
 
-            </div>
           </div>
         </div>
-      </template>
+      </div>
+
     </div>
 
     <input ref="fileInput" type="file" accept="image/*" @change="onFileChange" style="display:none">
@@ -145,24 +136,18 @@ const viewModes = [
 const imgW = computed(() => props.imageWidth  || 900)
 const imgH = computed(() => props.imageHeight || 600)
 
-// canvas-wrap 的尺寸样式：fit=缩放适应，actual=按缩放比例定义实际像素尺寸
 const canvasWrapStyle = computed(() => {
   if (viewMode.value === 'fit') {
-    // fit 模式：让 canvas 以原始比例充满容器，不超出
     return {
-      width:  imgW.value + 'px',
-      height: imgH.value + 'px',
-      maxWidth: '100%',
+      width:      imgW.value + 'px',
+      height:     imgH.value + 'px',
+      maxWidth:  '100%',
       maxHeight: '100%',
     }
   }
-  // actual 模式：按缩放比确定真实显示尺寸
   const w = Math.round(imgW.value * zoom.value / 100)
   const h = Math.round(imgH.value * zoom.value / 100)
-  return {
-    width:  w + 'px',
-    height: h + 'px',
-  }
+  return { width: w + 'px', height: h + 'px' }
 })
 
 defineExpose({ effectCanvas, originalCanvas, effectCanvasCmp })
@@ -174,12 +159,10 @@ function onDrop(e) {
   const file = e.dataTransfer?.files?.[0]
   if (file) emit('upload', { target: { files: [file] } })
 }
-
 function changeZoom(delta) {
   zoom.value = Math.min(400, Math.max(10, zoom.value + delta))
 }
 
-// 对比滑块拖拽
 function startDrag(e) {
   e.preventDefault()
   isDragging = true
@@ -250,8 +233,7 @@ function updatePos(clientX) {
 
 /* 画布区 */
 .canvas-area {
-  flex: 1; display: flex; align-items: stretch; justify-content: center;
-  overflow: hidden; position: relative;
+  flex: 1; position: relative; overflow: hidden;
   background: var(--canvas-bg, #080808);
 }
 .canvas-area::before {
@@ -262,86 +244,59 @@ function updatePos(clientX) {
   background-size: 40px 40px; pointer-events: none;
 }
 
-/* 上传占位 */
+/* 上传占位（绝对定位遮住画布区域） */
 .upload-placeholder {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; z-index: 2;
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 10;
+  background: var(--canvas-bg, #080808);
 }
 .upload-box {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 52px 72px; border: 1px dashed var(--border, #222); border-radius: 12px;
-  background: var(--upload-bg, rgba(10,10,10,0.85)); transition: all 0.2s;
-  color: var(--text-muted, #333);
+  background: transparent; transition: all 0.2s; color: var(--text-muted, #333);
 }
 .upload-placeholder:hover .upload-box { border-color: var(--border-hover, #333); color: var(--text-dim, #555); }
 .upload-text { font-size: 14px; color: var(--text-dim, #555); font-weight: 500; }
 .upload-sub  { font-size: 12px; color: var(--text-muted, #333); }
 
-/* scroll 容器 */
+/* scroll 容器：始终在 DOM，hasImage=false 时不可见 */
 .scroll-wrap {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 32px;
-  position: relative; z-index: 1;
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px; overflow: hidden; z-index: 1;
 }
-.scroll-wrap.scrollable {
-  overflow: auto;
-  /* actual 模式：内容按中心对齐，超出时可滚动 */
-  align-items: flex-start;
-  justify-content: flex-start;
-}
+.scroll-wrap.hidden { visibility: hidden; pointer-events: none; }
+.scroll-wrap.scrollable { overflow: auto; align-items: flex-start; justify-content: flex-start; }
 
-/* 居中容器（actual 模式下保证内容可居中） */
+/* 居中容器 */
 .center-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 100%;
-  min-height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 100%; min-height: 100%;
 }
 
 /* canvas 外层 wrap */
 .canvas-wrap {
-  position: relative;
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
+  position: relative; flex-shrink: 0;
+  border-radius: 4px; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 24px 64px rgba(0,0,0,0.6);
-  line-height: 0;
 }
 
 /* canvas 填满 wrap */
 .abs-fill {
-  display: block;
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
+  display: block; position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
 }
 
-/* 用一个透明占位元素撑开 wrap 高度（保持 canvas 宽高比） */
-.size-placeholder {
-  display: block;
-  width: 100%;
-  /* padding-bottom 由 JS 控制，以保持图片比例 */
-  visibility: hidden;
-}
-
-/* 对比：右侧裁剪层 */
+/* 对比：右侧裁剪 */
 .cmp-clip {
-  position: absolute; top: 0; right: 0;
-  height: 100%;
-  overflow: hidden;
+  position: absolute; top: 0; right: 0; height: 100%; overflow: hidden;
 }
 .cmp-clip canvas {
-  position: absolute; top: 0; right: 0;
-  width: 100%; height: 100%;
+  position: absolute; top: 0; right: 0; width: 100%; height: 100%;
 }
 
-/* 分割线 */
+/* 分割线手柄 */
 .cmp-handle {
   position: absolute; top: 0; bottom: 0;
   transform: translateX(-50%);
