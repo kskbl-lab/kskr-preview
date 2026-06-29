@@ -51,40 +51,33 @@
         </div>
       </div>
 
-      <!-- scroll 容器（actual 模式可滚动），hasImage=false 时不可见但 canvas 仍在 DOM -->
+      <!-- 画布容器：始终在 DOM，hasImage=false 时不可见 -->
       <div class="scroll-wrap" :class="{ scrollable: viewMode === 'actual', hidden: !hasImage }">
         <div class="center-wrap">
-          <!-- canvas 外层 wrap，尺寸由样式控制 -->
           <div class="canvas-wrap" :style="canvasWrapStyle" ref="canvasWrapRef">
 
-            <!-- 普通模式：效果 canvas（对比模式时隐藏） -->
-            <canvas ref="effectCanvas" class="abs-fill" :style="{ opacity: compareMode ? 0 : 1 }"></canvas>
+            <!-- WebGL canvas（wave-blur 专用），2D 效果时隐藏 -->
+            <canvas ref="webglCanvas" class="abs-fill" :style="{ display: isWebGL ? 'block' : 'none' }"></canvas>
 
-            <!-- 对比模式：原图铺底 + 效果图裁剪右侧 -->
-            <template v-if="compareMode">
-              <canvas ref="originalCanvas" class="abs-fill"></canvas>
-              <div class="cmp-clip" :style="{ width: (100 - comparePos) + '%' }">
-                <canvas ref="effectCanvasCmp" class="abs-fill"></canvas>
-              </div>
-              <!-- 分割线手柄 -->
-              <div
-                class="cmp-handle"
-                :style="{ left: (100 - comparePos) + '%' }"
-                @mousedown.stop="startDrag"
-                @touchstart.stop.prevent="startDrag"
-              >
-                <div class="handle-line"></div>
-                <div class="handle-knob">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="15 18 9 12 15 6"/>
-                    <polyline points="9 18 3 12 9 6" transform="translate(6,0)"/>
-                  </svg>
-                </div>
-              </div>
+            <!-- 2D canvas（所有非 WebGL 效果），WebGL 时隐藏 -->
+            <canvas ref="canvas2d" class="abs-fill" :style="{ display: isWebGL ? 'none' : 'block' }"></canvas>
+
+            <!-- 对比模式覆盖层（点击切换原图/效果） -->
+            <div
+              v-if="compareMode && hasImage"
+              class="compare-overlay"
+              :class="{ 'showing-original': showingOriginal }"
+              @click="toggleOriginal"
+            >
+              <!-- 原图 canvas（对比时绘制原始图像） -->
+              <canvas ref="originalCanvas" class="abs-fill" :style="{ opacity: showingOriginal ? 1 : 0 }"></canvas>
               <!-- 标签 -->
-              <div class="cmp-label cmp-label-l">原图</div>
-              <div class="cmp-label cmp-label-r">效果</div>
-            </template>
+              <div class="cmp-badge" :class="showingOriginal ? 'badge-orig' : 'badge-fx'">
+                {{ showingOriginal ? '原图' : '效果' }}
+              </div>
+              <!-- 点击提示 -->
+              <div class="cmp-hint">点击切换</div>
+            </div>
 
           </div>
         </div>
@@ -102,25 +95,25 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   compareMode:     { type: Boolean, default: false },
   hasImage:        { type: Boolean, default: false },
+  isWebGL:         { type: Boolean, default: false },
+  showingOriginal: { type: Boolean, default: false },
   currentCategory: { type: String,  default: '' },
   currentPlugin:   { type: String,  default: '' },
   imageWidth:      { type: Number,  default: 0 },
   imageHeight:     { type: Number,  default: 0 },
 })
 
-const emit = defineEmits(['upload'])
+const emit = defineEmits(['upload', 'toggle-original'])
 
-const effectCanvas    = ref(null)
-const originalCanvas  = ref(null)
-const effectCanvasCmp = ref(null)
-const fileInput       = ref(null)
-const canvasWrapRef   = ref(null)
-const canvasArea      = ref(null)
+const webglCanvas  = ref(null)
+const canvas2d     = ref(null)
+const originalCanvas = ref(null)
+const fileInput    = ref(null)
+const canvasWrapRef = ref(null)
+const canvasArea   = ref(null)
 
-const viewMode   = ref('fit')
-const zoom       = ref(100)
-const comparePos = ref(50)
-let isDragging   = false
+const viewMode = ref('fit')
+const zoom     = ref(100)
 
 const viewModes = [
   {
@@ -138,19 +131,16 @@ const imgH = computed(() => props.imageHeight || 600)
 
 const canvasWrapStyle = computed(() => {
   if (viewMode.value === 'fit') {
-    return {
-      width:      imgW.value + 'px',
-      height:     imgH.value + 'px',
-      maxWidth:  '100%',
-      maxHeight: '100%',
-    }
+    return { width: imgW.value + 'px', height: imgH.value + 'px', maxWidth: '100%', maxHeight: '100%' }
   }
-  const w = Math.round(imgW.value * zoom.value / 100)
-  const h = Math.round(imgH.value * zoom.value / 100)
-  return { width: w + 'px', height: h + 'px' }
+  return {
+    width:  Math.round(imgW.value * zoom.value / 100) + 'px',
+    height: Math.round(imgH.value * zoom.value / 100) + 'px',
+  }
 })
 
-defineExpose({ effectCanvas, originalCanvas, effectCanvasCmp })
+// 暴露两个专用 canvas + originalCanvas
+defineExpose({ webglCanvas, canvas2d, originalCanvas })
 
 function triggerUpload() { fileInput.value?.click() }
 function onFileChange(e) { emit('upload', e) }
@@ -162,30 +152,8 @@ function onDrop(e) {
 function changeZoom(delta) {
   zoom.value = Math.min(400, Math.max(10, zoom.value + delta))
 }
-
-function startDrag(e) {
-  e.preventDefault()
-  isDragging = true
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('touchmove', onTouchMove, { passive: false })
-  document.addEventListener('mouseup', stopDrag)
-  document.addEventListener('touchend', stopDrag)
-}
-function stopDrag() {
-  isDragging = false
-  document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('touchmove', onTouchMove)
-  document.removeEventListener('mouseup', stopDrag)
-  document.removeEventListener('touchend', stopDrag)
-}
-function onMouseMove(e) { if (isDragging) updatePos(e.clientX) }
-function onTouchMove(e) { if (isDragging) { e.preventDefault(); updatePos(e.touches[0].clientX) } }
-function updatePos(clientX) {
-  const wrap = canvasWrapRef.value
-  if (!wrap) return
-  const rect = wrap.getBoundingClientRect()
-  const pct  = ((clientX - rect.left) / rect.width) * 100
-  comparePos.value = Math.min(95, Math.max(5, 100 - pct))
+function toggleOriginal() {
+  emit('toggle-original')
 }
 </script>
 
@@ -244,7 +212,7 @@ function updatePos(clientX) {
   background-size: 40px 40px; pointer-events: none;
 }
 
-/* 上传占位（绝对定位遮住画布区域） */
+/* 上传占位 */
 .upload-placeholder {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -254,13 +222,13 @@ function updatePos(clientX) {
 .upload-box {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 52px 72px; border: 1px dashed var(--border, #222); border-radius: 12px;
-  background: transparent; transition: all 0.2s; color: var(--text-muted, #333);
+  transition: all 0.2s; color: var(--text-muted, #333);
 }
 .upload-placeholder:hover .upload-box { border-color: var(--border-hover, #333); color: var(--text-dim, #555); }
 .upload-text { font-size: 14px; color: var(--text-dim, #555); font-weight: 500; }
 .upload-sub  { font-size: 12px; color: var(--text-muted, #333); }
 
-/* scroll 容器：始终在 DOM，hasImage=false 时不可见 */
+/* scroll 容器 */
 .scroll-wrap {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -268,60 +236,62 @@ function updatePos(clientX) {
 }
 .scroll-wrap.hidden { visibility: hidden; pointer-events: none; }
 .scroll-wrap.scrollable { overflow: auto; align-items: flex-start; justify-content: flex-start; }
-
-/* 居中容器 */
 .center-wrap {
   display: flex; align-items: center; justify-content: center;
   min-width: 100%; min-height: 100%;
 }
 
-/* canvas 外层 wrap */
+/* canvas wrap */
 .canvas-wrap {
   position: relative; flex-shrink: 0;
   border-radius: 4px; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 24px 64px rgba(0,0,0,0.6);
 }
-
-/* canvas 填满 wrap */
 .abs-fill {
   display: block; position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
 }
 
-/* 对比：右侧裁剪 */
-.cmp-clip {
-  position: absolute; top: 0; right: 0; height: 100%; overflow: hidden;
+/* 对比覆盖层 */
+.compare-overlay {
+  position: absolute; inset: 0;
+  cursor: pointer;
+  z-index: 5;
+  transition: opacity 0.2s;
 }
-.cmp-clip canvas {
-  position: absolute; top: 0; right: 0; width: 100%; height: 100%;
+.compare-overlay:hover { opacity: 0.95; }
+
+/* 原图 canvas 带渐变过渡 */
+.compare-overlay canvas {
+  transition: opacity 0.25s ease;
 }
 
-/* 分割线手柄 */
-.cmp-handle {
-  position: absolute; top: 0; bottom: 0;
+/* 状态标签 */
+.cmp-badge {
+  position: absolute; top: 14px; left: 14px;
+  font-size: 12px; font-weight: 700; padding: 4px 12px;
+  border-radius: 20px; pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+.badge-orig {
+  background: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.9);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+.badge-fx {
+  background: rgba(255,255,255,0.9);
+  color: #000;
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+/* 点击提示 */
+.cmp-hint {
+  position: absolute; bottom: 14px; left: 50%;
   transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 20; cursor: col-resize; width: 2px;
+  font-size: 11px; color: rgba(255,255,255,0.45);
+  background: rgba(0,0,0,0.4);
+  padding: 3px 10px; border-radius: 20px;
+  pointer-events: none; white-space: nowrap;
+  backdrop-filter: blur(4px);
 }
-.handle-line {
-  position: absolute; top: 0; bottom: 0; left: 0;
-  width: 2px; background: rgba(255,255,255,0.7);
-}
-.handle-knob {
-  width: 36px; height: 36px; background: #fff; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; color: #000;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
-  position: relative; z-index: 1; transition: transform 0.15s; flex-shrink: 0;
-}
-.cmp-handle:hover .handle-knob { transform: scale(1.1); }
-
-/* 对比标签 */
-.cmp-label {
-  position: absolute; top: 14px;
-  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.75);
-  background: rgba(0,0,0,0.55); padding: 3px 10px; border-radius: 4px;
-  backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap;
-}
-.cmp-label-l { left: 12px; }
-.cmp-label-r { right: 12px; }
 </style>

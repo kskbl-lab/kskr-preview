@@ -17,11 +17,14 @@
         ref="previewArea"
         :compareMode="compareMode"
         :hasImage="hasImage"
+        :isWebGL="isWebGL"
+        :showingOriginal="showingOriginal"
         :imageWidth="imgW"
         :imageHeight="imgH"
         :currentCategory="currentCategoryName"
         :currentPlugin="currentPluginData?.name || ''"
         @upload="handleImageUpload"
+        @toggle-original="toggleOriginal"
       />
     </div>
   </div>
@@ -61,13 +64,14 @@ function setTheme(t) { currentTheme.value = t }
 // ── 状态 ──────────────────────────────────────
 const selectedPluginId = ref('wave-blur')
 const compareMode      = ref(false)
+const showingOriginal  = ref(false)  // 对比模式：当前显示的是原图还是效果
 const hasImage         = ref(false)
+const isWebGL          = ref(true)   // 当前插件是否使用 WebGL canvas
 const previewArea      = ref(null)
 const imgW             = ref(0)
 const imgH             = ref(0)
 
 let effect    = null
-let effectCmp = null   // 对比模式的第二个 effect 实例（绑定 effectCanvasCmp）
 let sourceImg = null
 
 // ── 插件元数据 ──────────────────────────────────────
@@ -257,27 +261,26 @@ function makeEffect(pluginId, canvas) {
   return null
 }
 
+// 获取当前插件应该用的 canvas（WebGL 或 2D）
+function getEffectCanvas() {
+  const pa = previewArea.value
+  if (!pa) return null
+  return isWebGL.value ? pa.webglCanvas : pa.canvas2d
+}
+
 function initEffect(pluginId) {
   effect?.destroy?.()
-  effectCmp?.destroy?.()
-  effect = null; effectCmp = null
+  effect = null
 
-  const ec = previewArea.value?.effectCanvas
-  effect = makeEffect(pluginId, ec)
+  isWebGL.value = (pluginId === 'wave-blur')
+
+  const canvas = getEffectCanvas()
+  effect = makeEffect(pluginId, canvas)
   if (sourceImg) effect?.loadImage(sourceImg)
 
   if (compareMode.value) {
-    initEffectCmp(pluginId)
     drawOriginal()
   }
-}
-
-function initEffectCmp(pluginId) {
-  effectCmp?.destroy?.()
-  effectCmp = null
-  const ecCmp = previewArea.value?.effectCanvasCmp
-  effectCmp = makeEffect(pluginId, ecCmp)
-  if (sourceImg) effectCmp?.loadImage(sourceImg)
 }
 
 function drawOriginal() {
@@ -327,10 +330,7 @@ function setImage(img) {
   hasImage.value = true
   nextTick(() => {
     effect?.loadImage(img)
-    if (compareMode.value) {
-      effectCmp?.loadImage(img)
-      drawOriginal()
-    }
+    if (compareMode.value) drawOriginal()
   })
 }
 
@@ -352,15 +352,16 @@ function resetParams() {
 
 function toggleCompare() {
   compareMode.value = !compareMode.value
-  nextTick(() => {
-    if (compareMode.value) {
-      initEffectCmp(selectedPluginId.value)
-      drawOriginal()
-    } else {
-      effectCmp?.destroy?.()
-      effectCmp = null
-    }
-  })
+  showingOriginal.value = false
+  if (compareMode.value && sourceImg) {
+    nextTick(() => drawOriginal())
+  }
+}
+
+function toggleOriginal() {
+  showingOriginal.value = !showingOriginal.value
+  // 切换到原图时，确保 originalCanvas 有内容
+  if (showingOriginal.value && sourceImg) drawOriginal()
 }
 
 function onSelectPlugin(plugin) {
