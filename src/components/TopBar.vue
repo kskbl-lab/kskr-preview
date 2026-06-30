@@ -4,33 +4,11 @@
       <div class="logo">
         <span class="logo-k">K</span><span class="logo-rest">Skr</span>
       </div>
-      <div class="topbar-divider"></div>
-
-      <!-- 导航 Tab -->
-      <nav class="topbar-nav">
-        <button
-          class="nav-tab"
-          :class="{ active: currentRoute === '/' }"
-          @click="$emit('nav', '/')"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          插件预览
-        </button>
-        <button
-          class="nav-tab"
-          :class="{ active: currentRoute === '/convert' }"
-          @click="$emit('nav', '/convert')"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-          视频素材转换
-        </button>
-      </nav>
     </div>
 
     <div class="topbar-right">
       <a href="https://kskr.kuaishou.com" target="_blank" class="topbar-link">文档</a>
       <a href="#" class="topbar-link">更新日志</a>
-      <a href="#" class="topbar-link">关于</a>
 
       <!-- 主题切换 -->
       <div class="theme-switcher">
@@ -83,23 +61,6 @@ const themes = [
 }
 .logo-k   { color: var(--text-primary, #fff); }
 .logo-rest { color: var(--text-muted, #555); }
-
-.topbar-divider { width: 1px; height: 18px; background: var(--border, #2a2a2a); }
-
-/* 导航 tab */
-.topbar-nav { display: flex; align-items: center; gap: 2px; }
-.nav-tab {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 12px; background: transparent; border: none;
-  border-radius: 6px; font-size: 13px;
-  color: var(--text-muted, #555); cursor: pointer;
-  transition: all 0.15s; font-family: inherit;
-}
-.nav-tab:hover { color: var(--text-dim, #888); background: var(--ctrl-hover, #151515); }
-.nav-tab.active {
-  color: var(--text-primary, #ddd);
-  background: var(--ctrl-active, #1a1a1a);
-}
 
 .topbar-link {
   font-size: 13px; color: var(--text-dim, #666);
