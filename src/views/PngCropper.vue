@@ -29,9 +29,10 @@
       <!-- ── 裁剪参数 ──────────────────── -->
       <div class="section">
         <div class="section-title">裁剪参数</div>
-        <div class="preset-row">
-          <button v-for="m in presets" :key="m.id" class="preset-btn" :class="{ active: activePreset === m.id }" @click="applyPreset(m)">
-            {{ m.name }}
+        <div class="mode-cards">
+          <button v-for="m in presets" :key="m.id" class="mode-card" :class="{ active: activePreset === m.id }" @click="applyPreset(m)">
+            <span class="mode-name">{{ m.name }}</span>
+            <span class="mode-desc">{{ m.desc }}</span>
           </button>
         </div>
 
@@ -45,7 +46,8 @@
         </div>
 
         <div class="hint-box">
-          阈值越低保留的半透明边缘越多；阈值越高越容易去掉透明噪点，但可能裁掉阴影或发光。
+          <b>Alpha 阈值：</b>越低保留的半透明边缘越多；越高越容易去掉透明噪点，但可能裁掉阴影或发光。<br/>
+          <b>Padding：</b>在裁剪边界外额外保留的像素数，防止阴影、发光、毛发、抗锯齿边缘被意外裁掉。
         </div>
       </div>
 
@@ -243,9 +245,9 @@ const activePreset   = ref('precise')
 const autoBackup     = ref(true)
 
 const presets = [
-  { id: 'precise',  name: '精准',  threshold: 1,  padding: 10 },
-  { id: 'standard', name: '标准',  threshold: 10, padding: 5  },
-  { id: 'strong',   name: '强力',  threshold: 50, padding: 0  },
+  { id: 'precise',  name: '精准模式',  desc: 'α≥1 · padding=10 · 保留所有半透明边缘',  threshold: 1,  padding: 10 },
+  { id: 'standard', name: '标准模式',  desc: 'α≥10 · padding=5 · 适合普通 PNG',         threshold: 10, padding: 5  },
+  { id: 'strong',   name: '强力模式',  desc: 'α≥50 · padding=0 · 去除透明噪点',          threshold: 50, padding: 0  },
 ]
 
 function applyPreset(p) {
@@ -638,7 +640,21 @@ onBeforeUnmount(() => { tasks.value = [] })
   color: var(--text-muted, #444); margin-bottom: 9px;
 }
 
-/* 预设按钮 */
+/* 模式卡 */
+.mode-cards { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.mode-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 12px; border-radius: 7px; text-align: left;
+  background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.mode-card:hover { border-color: var(--border-hover, #333); }
+.mode-card.active { border-color: var(--border-hover, #444); background: var(--ctrl-active, #1a1a1a); }
+.mode-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #ddd); }
+.mode-desc { font-size: 10px; color: var(--text-muted, #555); font-family: monospace; }
+.mode-card.active .mode-desc { color: var(--text-dim, #777); }
+
+/* 预设按钮（旧，保留以防万一） */
 .preset-row { display: flex; gap: 5px; margin-bottom: 10px; }
 .preset-btn {
   flex: 1; padding: 5px 4px; font-size: 11.5px; border-radius: 5px;
