@@ -1,112 +1,147 @@
 <template>
   <div class="cropper-page">
 
-    <!-- ── 左侧控制面板 ─────────────────── -->
+    <!-- ── 左侧控制面板 ─────────────────────── -->
     <div class="ctrl-panel">
-
       <div class="panel-header">
         <span class="panel-title">裁剪 PNG 透明像素</span>
       </div>
 
-      <!-- 裁剪模式快选 -->
+      <!-- 模式切换 -->
+      <div class="mode-switch-row">
+        <button class="mode-tab" :class="{ active: pageMode === 'safe' }"     @click="pageMode = 'safe'">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          安全模式
+        </button>
+        <button
+          class="mode-tab"
+          :class="{ active: pageMode === 'overwrite' }"
+          @click="pageMode = 'overwrite'"
+          :disabled="!hasFSAPI"
+          :title="!hasFSAPI ? '当前浏览器不支持直接覆盖文件' : ''"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          覆盖模式
+        </button>
+        <div v-if="!hasFSAPI" class="no-fsapi-hint">覆盖模式需 Chrome/Edge 86+</div>
+      </div>
+
+      <!-- ── 裁剪参数 ──────────────────── -->
       <div class="section">
-        <div class="section-title">裁剪模式</div>
-        <div class="mode-cards">
-          <button
-            v-for="m in modes" :key="m.id"
-            class="mode-card"
-            :class="{ active: currentMode === m.id }"
-            @click="applyMode(m)"
-          >
-            <span class="mode-name">{{ m.name }}</span>
-            <span class="mode-desc">{{ m.desc }}</span>
+        <div class="section-title">裁剪参数</div>
+        <div class="preset-row">
+          <button v-for="m in presets" :key="m.id" class="preset-btn" :class="{ active: activePreset === m.id }" @click="applyPreset(m)">
+            {{ m.name }}
           </button>
         </div>
-      </div>
 
-      <!-- 阈值 -->
-      <div class="section">
-        <div class="section-title">Alpha 阈值
-          <span class="section-val">{{ alphaThreshold }}</span>
+        <div class="param-row">
+          <label class="param-label">Alpha 阈值 <span class="param-val">{{ alphaThreshold }}</span></label>
+          <input type="range" v-model.number="alphaThreshold" min="0" max="255" class="slider" />
         </div>
-        <input type="range" v-model.number="alphaThreshold" min="0" max="255" step="1" class="slider" @input="onParamChange" />
+        <div class="param-row">
+          <label class="param-label">Padding <span class="param-val">{{ padding }}px</span></label>
+          <input type="range" v-model.number="padding" min="0" max="200" class="slider" />
+        </div>
+
         <div class="hint-box">
-          Alpha 阈值越低，保留的半透明边缘越多；阈值越高，越容易去掉透明噪点，但也可能裁掉阴影或发光。
+          阈值越低保留的半透明边缘越多；阈值越高越容易去掉透明噪点，但可能裁掉阴影或发光。
         </div>
       </div>
 
-      <!-- 保护半透明边缘 -->
-      <div class="section">
-        <label class="toggle-row">
-          <div class="toggle-info">
-            <span class="toggle-label">保护半透明边缘</span>
-            <span class="toggle-sub">开启后阈值自动降为 1</span>
+      <!-- ── 安全模式：导入 ──────────────── -->
+      <template v-if="pageMode === 'safe'">
+        <div class="section">
+          <div class="section-title">导入文件</div>
+          <div class="import-btns">
+            <input ref="filePicker"   type="file" accept="image/png" multiple style="display:none" @change="onFilePick" />
+            <input ref="folderPicker" type="file" accept="image/png" multiple webkitdirectory style="display:none" @change="onFolderPick" />
+            <button class="btn-import" @click="filePicker.click()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+              选择 PNG 文件
+            </button>
+            <button class="btn-import" @click="folderPicker.click()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              选择文件夹
+            </button>
           </div>
-          <div class="toggle-switch" :class="{ on: protectEdge }" @click="toggleProtect">
-            <div class="toggle-knob"></div>
-          </div>
-        </label>
-      </div>
-
-      <!-- Padding -->
-      <div class="section">
-        <div class="section-title">扩展边距 (Padding)
-          <span class="section-val">{{ padding }}px</span>
+          <div class="add-hint">支持多选 PNG；文件夹导入保留相对路径</div>
         </div>
-        <input type="range" v-model.number="padding" min="0" max="200" step="1" class="slider" @input="onParamChange" />
-        <div class="hint-box">
-          防止阴影、发光、毛发等半透明边缘被意外裁掉。
+
+        <div v-if="tasks.length" class="section section-actions">
+          <button class="btn-primary" :disabled="isProcessing" @click="processAllSafe">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            {{ isProcessing ? '处理中…' : '全部裁剪' }}
+          </button>
+          <button class="btn-ghost" :disabled="!hasAnyDone || isProcessing" @click="downloadZip">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 ZIP
+          </button>
+          <button class="btn-ghost btn-danger" @click="clearAll">清空</button>
         </div>
-      </div>
+      </template>
 
-      <!-- 添加文件 -->
-      <div class="section">
-        <input ref="fileInput" type="file" accept="image/png" multiple style="display:none" @change="onFileChange" />
-        <button class="btn-add" @click="fileInput.click()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          添加 PNG 文件
-        </button>
-        <div class="add-hint">支持多选，仅处理 PNG</div>
-      </div>
+      <!-- ── 覆盖模式：导入 ──────────────── -->
+      <template v-if="pageMode === 'overwrite' && hasFSAPI">
+        <div class="section">
+          <div class="section-title">覆盖选项</div>
+          <label class="toggle-row">
+            <div class="toggle-info">
+              <span class="toggle-label">覆盖前自动备份原图</span>
+              <span class="toggle-sub">备份至 _backup_original_pngs 子文件夹</span>
+            </div>
+            <div class="toggle-switch" :class="{ on: autoBackup }" @click="autoBackup = !autoBackup">
+              <div class="toggle-knob"></div>
+            </div>
+          </label>
+        </div>
+        <div class="section section-actions">
+          <button class="btn-primary btn-overwrite" @click="pickFolderOverwrite" :disabled="isProcessing">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            {{ isProcessing ? '覆盖处理中…' : '选择文件夹并直接覆盖' }}
+          </button>
+          <div class="overwrite-hint">处理完成后原 PNG 将被裁剪版本覆盖，文件名保持不变</div>
+        </div>
 
-      <!-- 全局操作 -->
-      <div v-if="tasks.length" class="section section-actions">
-        <button class="btn-primary" :disabled="isProcessing" @click="processAll">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          {{ isProcessing ? '处理中…' : '全部裁剪' }}
-        </button>
-        <button class="btn-ghost" @click="downloadAll" :disabled="!hasAnyDone">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          下载全部
-        </button>
-        <button class="btn-ghost btn-danger" @click="clearAll">清空</button>
-      </div>
+        <div v-if="tasks.length" class="section section-actions">
+          <button class="btn-ghost btn-danger" @click="clearAll">清空列表</button>
+        </div>
+      </template>
 
-      <!-- 任务列表 -->
+      <!-- ── 任务列表 ──────────────────── -->
       <div v-if="tasks.length" class="task-list">
-        <div class="task-list-hd">文件列表 ({{ tasks.length }})</div>
+        <div class="task-list-hd">
+          文件列表 ({{ tasks.length }})
+          <span class="task-stats">
+            <span class="stat-done">{{ doneCount }} 完成</span>
+            <span v-if="skipCount"> · {{ skipCount }} 跳过</span>
+            <span v-if="errorCount" class="stat-err"> · {{ errorCount }} 失败</span>
+          </span>
+        </div>
         <div
           v-for="task in tasks" :key="task.id"
           class="task-item"
-          :class="['task-' + task.status, { selected: selectedId === task.id }]"
+          :class="['st-' + task.status, { selected: selectedId === task.id }]"
           @click="selectTask(task)"
         >
-          <div class="task-thumb">
+          <div class="task-thumb checker">
             <img v-if="task.previewUrl" :src="task.previewUrl" />
-            <div v-else class="thumb-placeholder">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <div v-else class="thumb-ph">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             </div>
           </div>
           <div class="task-info">
-            <div class="task-name">{{ task.file.name }}</div>
+            <div class="task-name" :title="task.relPath || task.file.name">{{ task.file.name }}</div>
+            <div class="task-path" v-if="task.relPath && task.relPath !== task.file.name">{{ task.relPath }}</div>
             <div class="task-meta">
               <span v-if="task.origW">{{ task.origW }}×{{ task.origH }}</span>
-              <span v-if="task.cropW && task.status === 'done'" class="crop-size">→ {{ task.cropW }}×{{ task.cropH }}</span>
+              <span v-if="task.cropW && (task.status === 'done' || task.status === 'overwritten')" class="crop-arrow">→ {{ task.cropW }}×{{ task.cropH }}</span>
               <span class="task-badge" :class="'badge-' + task.status">{{ statusLabel(task.status) }}</span>
             </div>
+            <div v-if="task.errorMsg" class="task-err">{{ task.errorMsg }}</div>
           </div>
           <div class="task-btns" @click.stop>
-            <button v-if="task.status === 'done'" class="tbtn tbtn-dl" @click="downloadTask(task)" title="下载">
+            <button v-if="pageMode === 'safe' && task.status === 'done'" class="tbtn tbtn-dl" @click="downloadSingle(task)" title="单独下载">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <button class="tbtn tbtn-rm" @click="removeTask(task)" title="移除">
@@ -117,342 +152,442 @@
       </div>
 
       <!-- 空态 -->
-      <div v-else class="empty-hint" @click="fileInput.click()" @dragover.prevent @drop.prevent="onDropGlobal">
+      <div v-else-if="pageMode === 'safe'" class="empty-hint" @dragover.prevent @drop.prevent="onDropGlobal">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>点击或拖拽 PNG 文件到此处</p>
+        <p>拖拽 PNG 文件 / 文件夹到此处<br>或点击上方按钮添加</p>
       </div>
-
     </div>
 
-    <!-- ── 右侧预览区 ─────────────────────── -->
+    <!-- ── 右侧预览区 ───────────────────────── -->
     <div class="preview-pane" @dragover.prevent @drop.prevent="onDropGlobal">
 
       <div v-if="!selectedTask" class="preview-empty">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <p>点击左侧文件查看裁剪对比</p>
-        <p class="sub">或拖拽 PNG 文件到此处添加</p>
+        <p class="sub">或拖拽 PNG 文件 / 文件夹到此处</p>
       </div>
 
       <template v-if="selectedTask">
-
-        <!-- 对比视图 -->
         <div class="compare-wrap">
           <!-- 原图 -->
           <div class="compare-side">
             <div class="compare-label">原图</div>
-            <div class="compare-img-wrap checker">
-              <canvas ref="origCanvas" class="compare-canvas"></canvas>
+            <div class="compare-img-box checker">
+              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
             </div>
-            <div v-if="selectedTask.origW" class="compare-size">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
+            <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
           </div>
 
-          <!-- 箭头 -->
-          <div class="compare-arrow">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <div class="cmp-arrow">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </div>
 
           <!-- 裁剪后 -->
           <div class="compare-side">
             <div class="compare-label">裁剪后</div>
-            <div class="compare-img-wrap checker">
-              <canvas ref="cropCanvas" class="compare-canvas"></canvas>
-              <div v-if="selectedTask.status === 'idle'" class="canvas-overlay">
-                <span>点击"全部裁剪"预览</span>
-              </div>
-              <div v-if="selectedTask.status === 'processing'" class="canvas-overlay">
-                <span>处理中…</span>
+            <div class="compare-img-box checker">
+              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
+              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
+                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
               </div>
             </div>
-            <div v-if="selectedTask.cropW" class="compare-size">
+            <div class="compare-size" v-if="selectedTask.cropW">
               {{ selectedTask.cropW }} × {{ selectedTask.cropH }}
-              <span v-if="selectedTask.savingPct" class="saving">节省 {{ selectedTask.savingPct }}%</span>
+              <span v-if="selectedTask.savingPct > 0" class="saving">节省 {{ selectedTask.savingPct }}%</span>
+              <span v-if="selectedTask.savingPct === 0" class="no-change">无需裁剪</span>
             </div>
           </div>
         </div>
 
-        <!-- 操作行 -->
         <div class="action-row">
-          <button class="btn-primary" @click="processSingle(selectedTask)" :disabled="selectedTask.status === 'processing'">
-            裁剪此文件
-          </button>
-          <button v-if="selectedTask.status === 'done'" class="btn-dl" @click="downloadTask(selectedTask)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <button class="btn-primary" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
+          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl" @click="downloadSingle(selectedTask)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             下载 {{ selectedTask.file.name }}
           </button>
           <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
         </div>
-
       </template>
-
     </div>
 
-    <!-- 隐藏工作 canvas -->
+    <!-- 确认弹窗 -->
+    <div v-if="confirmDialog.show" class="dialog-mask">
+      <div class="dialog">
+        <div class="dialog-title">⚠️ 确认覆盖操作</div>
+        <div class="dialog-body">{{ confirmDialog.message }}</div>
+        <div class="dialog-actions">
+          <button class="btn-ghost" @click="confirmDialog.resolve(false)">取消</button>
+          <button class="btn-danger-solid" @click="confirmDialog.resolve(true)">确认覆盖</button>
+        </div>
+      </div>
+    </div>
+
     <canvas ref="workCanvas" style="display:none"></canvas>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
+import JSZip from 'jszip'
+
+// ── 能力检测 ──────────────────────────────────
+const hasFSAPI = typeof window !== 'undefined' && 'showDirectoryPicker' in window
+
+// ── 页面模式 ──────────────────────────────────
+const pageMode = ref('safe')
 
 // ── 参数 ────────────────────────────────────
 const alphaThreshold = ref(1)
-const protectEdge    = ref(false)
 const padding        = ref(10)
-const currentMode    = ref('precise')
+const activePreset   = ref('precise')
+const autoBackup     = ref(true)
 
-const modes = [
-  { id: 'precise',  name: '精准模式', desc: 'α≥1  padding=10  保留所有半透明', threshold: 1,  padding: 10 },
-  { id: 'standard', name: '标准模式', desc: 'α≥10  padding=5   适合普通 PNG',   threshold: 10, padding: 5  },
-  { id: 'strong',   name: '强力模式', desc: 'α≥50  padding=0   去除透明噪点',   threshold: 50, padding: 0  },
+const presets = [
+  { id: 'precise',  name: '精准',  threshold: 1,  padding: 10 },
+  { id: 'standard', name: '标准',  threshold: 10, padding: 5  },
+  { id: 'strong',   name: '强力',  threshold: 50, padding: 0  },
 ]
 
-function applyMode(m) {
-  currentMode.value    = m.id
-  alphaThreshold.value = m.threshold
-  padding.value        = m.padding
-  if (m.id === 'precise') protectEdge.value = true
-  reprocessSelected()
+function applyPreset(p) {
+  activePreset.value   = p.id
+  alphaThreshold.value = p.threshold
+  padding.value        = p.padding
 }
 
-function toggleProtect() {
-  protectEdge.value = !protectEdge.value
-  if (protectEdge.value) alphaThreshold.value = 1
-  reprocessSelected()
-}
-
-function onParamChange() {
-  currentMode.value = 'custom'
-  reprocessSelected()
-}
-
-// ── 任务队列 ────────────────────────────────
+// ── 任务队列 ──────────────────────────────────
 const tasks      = ref([])
 const selectedId = ref(null)
-const fileInput  = ref(null)
-const workCanvas = ref(null)
-const origCanvas = ref(null)
-const cropCanvas = ref(null)
+let   idCtr      = 0
 
-let idCounter = 0
+const selectedTask = computed(() => tasks.value.find(t => t.id === selectedId.value) || null)
+const isProcessing = computed(() => tasks.value.some(t => t.status === 'processing'))
+const hasAnyDone   = computed(() => tasks.value.some(t => t.status === 'done' || t.status === 'overwritten'))
+const doneCount    = computed(() => tasks.value.filter(t => t.status === 'done' || t.status === 'overwritten' || t.status === 'skipped').length)
+const skipCount    = computed(() => tasks.value.filter(t => t.status === 'skipped' || t.status === 'transparent').length)
+const errorCount   = computed(() => tasks.value.filter(t => t.status === 'error').length)
 
-const selectedTask  = computed(() => tasks.value.find(t => t.id === selectedId.value) || null)
-const isProcessing  = computed(() => tasks.value.some(t => t.status === 'processing'))
-const hasAnyDone    = computed(() => tasks.value.some(t => t.status === 'done'))
+// ── 文件来源：input 选择 ─────────────────────
+const filePicker   = ref(null)
+const folderPicker = ref(null)
 
-// ── 文件加载 ───────────────────────────────
-function onFileChange(e) {
-  addFiles(Array.from(e.target.files || []))
+function onFilePick(e) {
+  addFiles(Array.from(e.target.files || []), false)
   e.target.value = ''
 }
-function onDropGlobal(e) {
-  const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === 'image/png')
-  if (files.length) addFiles(files)
+
+function onFolderPick(e) {
+  addFiles(Array.from(e.target.files || []), true)
+  e.target.value = ''
 }
 
-function addFiles(files) {
+function onDropGlobal(e) {
+  if (pageMode.value !== 'safe') return
+  const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === 'image/png' || /\.png$/i.test(f.name))
+  if (files.length) addFiles(files, false)
+}
+
+function addFiles(files, fromFolder) {
   for (const file of files) {
-    if (file.type !== 'image/png') continue
-    const task = {
-      id: ++idCounter,
-      file,
-      status: 'idle',
-      previewUrl: '',
-      origImageData: null,
-      cropImageData: null,
-      origW: 0, origH: 0,
-      cropW: 0, cropH: 0,
-      savingPct: 0,
-      downloadUrl: '',
-      errorMsg: '',
-    }
+    if (file.type !== 'image/png' && !/\.png$/i.test(file.name)) continue
+    // 相对路径：webkitdirectory 下 file.webkitRelativePath 有值
+    const relPath = (fromFolder && file.webkitRelativePath) ? file.webkitRelativePath : file.name
+    const task = makeTask(file, relPath)
     tasks.value.push(task)
     loadPreview(task)
     if (!selectedId.value) selectedId.value = task.id
   }
 }
 
+function makeTask(file, relPath, fileHandle = null, dirHandle = null) {
+  return {
+    id: ++idCtr,
+    file,
+    relPath,
+    fileHandle,   // File System Access API handle
+    dirHandle,    // 根目录 handle（备份用）
+    status: 'idle',   // idle|processing|done|overwritten|skipped|transparent|error
+    previewUrl: '',
+    origImageData: null,
+    cropCanvas: null,
+    origW: 0, origH: 0,
+    cropW: 0, cropH: 0,
+    savingPct: 0,
+    downloadBlob: null,
+    errorMsg: '',
+  }
+}
+
 function loadPreview(task) {
   const url = URL.createObjectURL(task.file)
+  task.previewUrl = url
   const img = new Image()
   img.onload = () => {
-    task.previewUrl = url
-    // load original image data
     const c = document.createElement('canvas')
     c.width = img.naturalWidth; c.height = img.naturalHeight
     c.getContext('2d').drawImage(img, 0, 0)
     task.origImageData = c.getContext('2d').getImageData(0, 0, c.width, c.height)
     task.origW = c.width; task.origH = c.height
     if (selectedId.value === task.id) nextTick(() => drawOrigCanvas(task))
+    URL.revokeObjectURL(url)
+    task.previewUrl = c.toDataURL('image/png')
   }
   img.src = url
 }
 
 function selectTask(task) {
   selectedId.value = task.id
-  nextTick(() => {
-    drawOrigCanvas(task)
-    drawCropCanvas(task)
-  })
+  nextTick(() => { drawOrigCanvas(task); drawCropCanvas(task) })
 }
 
 function removeTask(task) {
-  URL.revokeObjectURL(task.previewUrl)
-  if (task.downloadUrl) URL.revokeObjectURL(task.downloadUrl)
   tasks.value = tasks.value.filter(t => t.id !== task.id)
-  if (selectedId.value === task.id) {
-    selectedId.value = tasks.value[0]?.id || null
-  }
+  if (selectedId.value === task.id) selectedId.value = tasks.value[0]?.id || null
 }
 
 function clearAll() {
-  tasks.value.forEach(t => {
-    URL.revokeObjectURL(t.previewUrl)
-    if (t.downloadUrl) URL.revokeObjectURL(t.downloadUrl)
-  })
   tasks.value = []
   selectedId.value = null
 }
 
-// ── 裁剪核心 ────────────────────────────────
-function cropImageData(imageData, threshold, pad) {
+// ── 裁剪核心 ──────────────────────────────────
+function cropImageData(imageData, thr, pad) {
   const { data, width, height } = imageData
   let minX = width, maxX = -1, minY = height, maxY = -1
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const a = data[(y * width + x) * 4 + 3]
-      if (a > threshold) {
-        if (x < minX) minX = x
-        if (x > maxX) maxX = x
-        if (y < minY) minY = y
-        if (y > maxY) maxY = y
+      if (data[(y * width + x) * 4 + 3] > thr) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x
+        if (y < minY) minY = y; if (y > maxY) maxY = y
       }
     }
   }
-
   if (maxX < 0) return null // 全透明
 
-  // 应用 padding
-  minX = Math.max(0, minX - pad)
-  minY = Math.max(0, minY - pad)
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad)
   maxX = Math.min(width  - 1, maxX + pad)
   maxY = Math.min(height - 1, maxY + pad)
 
-  const cw = maxX - minX + 1
-  const ch = maxY - minY + 1
-
-  const c = document.createElement('canvas')
-  c.width = cw; c.height = ch
-  const ctx = c.getContext('2d')
+  const cw = maxX - minX + 1, ch = maxY - minY + 1
+  const out = document.createElement('canvas')
+  out.width = cw; out.height = ch
   const src = document.createElement('canvas')
   src.width = width; src.height = height
   src.getContext('2d').putImageData(imageData, 0, 0)
-  ctx.drawImage(src, minX, minY, cw, ch, 0, 0, cw, ch)
-  return { canvas: c, x: minX, y: minY, w: cw, h: ch }
+  out.getContext('2d').drawImage(src, minX, minY, cw, ch, 0, 0, cw, ch)
+  return { canvas: out, w: cw, h: ch }
 }
 
 async function processSingle(task) {
-  if (!task.origImageData) { task.errorMsg = '图片尚未加载'; return }
-  task.status   = 'processing'
-  task.errorMsg = ''
-  await nextTick()
-
+  if (!task.origImageData) { task.errorMsg = '图片尚未加载，请稍候'; return }
+  task.status = 'processing'; task.errorMsg = ''; await nextTick()
   try {
-    const thr = protectEdge.value ? 1 : alphaThreshold.value
-    const result = cropImageData(task.origImageData, thr, padding.value)
-    if (!result) { task.status = 'error'; task.errorMsg = '图片全透明，无需裁剪'; return }
-
+    const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
+    if (!result) {
+      task.status = 'transparent'; task.errorMsg = '图片全透明，已跳过'; return
+    }
+    if (result.w === task.origW && result.h === task.origH) {
+      task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; task.savingPct = 0
+      task.cropCanvas = result.canvas
+      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+      return
+    }
+    task.cropCanvas = result.canvas
     task.cropW = result.w; task.cropH = result.h
     task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
-
-    // 生成 PNG blob
-    const blob = await canvasToBlob(result.canvas)
-    if (task.downloadUrl) URL.revokeObjectURL(task.downloadUrl)
-    task.downloadUrl = URL.createObjectURL(blob)
-
-    task.cropCanvas = result.canvas
+    task.downloadBlob = await canvasToBlob(result.canvas)
     task.status = 'done'
-
     if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
   } catch (err) {
     task.status = 'error'; task.errorMsg = '裁剪失败：' + err.message
   }
 }
 
-async function processAll() {
+async function processAllSafe() {
   for (const t of tasks.value) {
-    await processSingle(t)
+    if (t.status === 'idle' || t.status === 'error') await processSingle(t)
   }
 }
 
-function reprocessSelected() {
-  const t = selectedTask.value
-  if (t && t.status === 'done') processSingle(t)
-}
-
-// ── 下载 ─────────────────────────────────────
-function downloadTask(task) {
-  if (!task.downloadUrl) return
+// ── 安全模式：下载 ───────────────────────────
+function downloadSingle(task) {
+  if (!task.downloadBlob) return
   const a = document.createElement('a')
-  a.href = task.downloadUrl
-  a.download = task.file.name.replace(/\.png$/i, '_cropped.png')
+  a.href = URL.createObjectURL(task.downloadBlob)
+  a.download = task.file.name   // 原文件名，无后缀
   a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000)
 }
 
-async function downloadAll() {
+async function downloadZip() {
+  const zip = new JSZip()
+  let count = 0
   for (const t of tasks.value) {
-    if (t.status === 'done') downloadTask(t)
-    await sleep(80)
+    if (t.status !== 'done' || !t.downloadBlob) continue
+    // ZIP 内路径 = 原始相对路径（含文件夹结构）
+    zip.file(t.relPath, t.downloadBlob)
+    count++
   }
+  if (!count) return
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'cropped_pngs.zip'
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+}
+
+// ── 覆盖模式：File System Access API ─────────
+async function pickFolderOverwrite() {
+  if (!hasFSAPI) return
+
+  let dirHandle
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
+  } catch { return }  // 用户取消
+
+  // 扫描所有 PNG
+  const found = []
+  await scanDir(dirHandle, dirHandle, '', found)
+  if (!found.length) { alert('该文件夹中没有找到 PNG 文件。'); return }
+
+  // 确认弹窗
+  const ok = await showConfirm(
+    `将处理文件夹"${dirHandle.name}"中的 ${found.length} 个 PNG 文件。\n\n` +
+    (autoBackup.value ? '备份将保存到 _backup_original_pngs 子文件夹中，' : '未开启自动备份，') +
+    '处理后原文件将被裁剪版本覆盖，文件名保持不变。\n\n建议先手动备份文件夹。是否继续？'
+  )
+  if (!ok) return
+
+  // 加载任务
+  clearAll()
+  for (const { file, relPath, fileHandle: fh, rootHandle: rh } of found) {
+    const task = makeTask(file, relPath, fh, rh)
+    tasks.value.push(task)
+    loadPreview(task)
+  }
+  if (tasks.value.length) selectedId.value = tasks.value[0].id
+
+  // 逐个处理
+  for (const task of tasks.value) {
+    task.status = 'processing'; await nextTick()
+    try {
+      if (!task.origImageData) {
+        // 等待 loadPreview 完成
+        await waitForImageData(task, 5000)
+      }
+      const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
+      if (!result) { task.status = 'transparent'; task.errorMsg = '全透明，已跳过'; continue }
+      if (result.w === task.origW && result.h === task.origH) { task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; continue }
+
+      const blob = await canvasToBlob(result.canvas)
+
+      // 备份原图
+      if (autoBackup.value) {
+        try { await backupFile(task, dirHandle) } catch {}
+      }
+
+      // 写回原文件
+      const writable = await task.fileHandle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+
+      task.cropCanvas = result.canvas
+      task.cropW = result.w; task.cropH = result.h
+      task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
+      task.downloadBlob = blob
+      task.status = 'overwritten'
+      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+    } catch (err) {
+      task.status = 'error'; task.errorMsg = err.message
+    }
+  }
+}
+
+async function scanDir(rootHandle, dirHandle, prefix, results) {
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === 'directory') {
+      if (name === '_backup_original_pngs') continue // 跳过备份目录
+      await scanDir(rootHandle, handle, prefix ? prefix + '/' + name : name, results)
+    } else if (handle.kind === 'file' && /\.png$/i.test(name)) {
+      const file = await handle.getFile()
+      const relPath = prefix ? prefix + '/' + name : name
+      results.push({ file, relPath, fileHandle: handle, rootHandle })
+    }
+  }
+}
+
+async function backupFile(task, rootHandle) {
+  // 在根目录下创建 _backup_original_pngs，保留相对路径
+  const parts = task.relPath.split('/')
+  let cur = rootHandle
+  const backupRoot = await cur.getDirectoryHandle('_backup_original_pngs', { create: true })
+  cur = backupRoot
+  for (let i = 0; i < parts.length - 1; i++) {
+    cur = await cur.getDirectoryHandle(parts[i], { create: true })
+  }
+  const fileName = parts[parts.length - 1]
+  const fh = await cur.getFileHandle(fileName, { create: true })
+  const origFile = await task.fileHandle.getFile()
+  const writable = await fh.createWritable()
+  await writable.write(origFile)
+  await writable.close()
+}
+
+function waitForImageData(task, timeout) {
+  return new Promise((resolve, reject) => {
+    if (task.origImageData) { resolve(); return }
+    const start = Date.now()
+    const iv = setInterval(() => {
+      if (task.origImageData) { clearInterval(iv); resolve() }
+      else if (Date.now() - start > timeout) { clearInterval(iv); reject(new Error('图片加载超时')) }
+    }, 50)
+  })
+}
+
+// ── 确认弹窗 ──────────────────────────────────
+const confirmDialog = ref({ show: false, message: '', resolve: null })
+function showConfirm(message) {
+  return new Promise(resolve => {
+    confirmDialog.value = {
+      show: true, message,
+      resolve: (val) => { confirmDialog.value.show = false; resolve(val) }
+    }
+  })
 }
 
 // ── 画布绘制 ──────────────────────────────────
+const origCanvas = ref(null)
+const cropCanvas = ref(null)
+const workCanvas = ref(null)
+
 function drawOrigCanvas(task) {
-  const c = origCanvas.value
-  if (!c || !task.origImageData) return
-  c.width  = task.origW
-  c.height = task.origH
+  const c = origCanvas.value; if (!c || !task.origImageData) return
+  c.width = task.origW; c.height = task.origH
   c.getContext('2d').putImageData(task.origImageData, 0, 0)
 }
-
 function drawCropCanvas(task) {
-  const c = cropCanvas.value
-  if (!c) return
+  const c = cropCanvas.value; if (!c) return
   if (task.cropCanvas) {
-    c.width  = task.cropCanvas.width
-    c.height = task.cropCanvas.height
+    c.width = task.cropCanvas.width; c.height = task.cropCanvas.height
     c.getContext('2d').drawImage(task.cropCanvas, 0, 0)
-  } else {
-    // clear
-    c.width = 1; c.height = 1
-    c.getContext('2d').clearRect(0,0,1,1)
-  }
+  } else { c.width = 1; c.height = 1; c.getContext('2d').clearRect(0,0,1,1) }
 }
 
-// watch selectedTask change → redraw
 watch(selectedTask, (t) => {
   if (!t) return
-  nextTick(() => {
-    drawOrigCanvas(t)
-    drawCropCanvas(t)
-  })
+  nextTick(() => { drawOrigCanvas(t); drawCropCanvas(t) })
 })
 
 // ── 工具 ─────────────────────────────────────
 function canvasToBlob(canvas) {
-  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+  return new Promise(r => canvas.toBlob(r, 'image/png'))
 }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 function statusLabel(s) {
-  return { idle:'待处理', processing:'处理中', done:'完成', error:'失败' }[s] || s
+  return { idle:'待处理', processing:'处理中', done:'已裁剪', overwritten:'已覆盖', skipped:'无需裁剪', transparent:'全透明跳过', error:'失败' }[s] || s
 }
 
-onBeforeUnmount(() => {
-  tasks.value.forEach(t => {
-    URL.revokeObjectURL(t.previewUrl)
-    if (t.downloadUrl) URL.revokeObjectURL(t.downloadUrl)
-  })
-})
+onBeforeUnmount(() => { tasks.value = [] })
 </script>
 
 <style scoped>
@@ -463,115 +598,125 @@ onBeforeUnmount(() => {
 
 /* ── 左侧面板 ─────────────────────── */
 .ctrl-panel {
-  width: 300px; flex-shrink: 0;
+  width: 310px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
   border-right: 1px solid var(--border, #1e1e1e);
-  display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; overflow-y: auto;
 }
 .ctrl-panel::-webkit-scrollbar { width: 4px; }
 .ctrl-panel::-webkit-scrollbar-thumb { background: var(--scrollbar, #222); border-radius: 2px; }
 
 .panel-header {
-  padding: 16px 16px 14px; border-bottom: 1px solid var(--border, #1e1e1e);
-  flex-shrink: 0;
+  padding: 16px 16px 14px; border-bottom: 1px solid var(--border, #1e1e1e); flex-shrink: 0;
 }
 .panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary, #ccc); }
 
-/* 各区块 */
+/* 模式切换 */
+.mode-switch-row {
+  display: flex; gap: 6px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #1e1e1e);
+  flex-wrap: wrap; align-items: center;
+}
+.mode-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
+  color: var(--text-muted, #555); cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.mode-tab:hover:not(:disabled)  { border-color: var(--border-hover, #333); color: var(--text-dim, #888); }
+.mode-tab.active { border-color: var(--border-hover, #444); color: var(--text-primary, #ddd); background: var(--ctrl-active, #1a1a1a); }
+.mode-tab:disabled { opacity: 0.35; cursor: not-allowed; }
+.no-fsapi-hint { font-size: 10px; color: var(--text-muted, #555); width: 100%; }
+
+/* 区块 */
 .section {
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border, #1e1e1e);
 }
 .section-title {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
-  color: var(--text-muted, #444); margin-bottom: 10px;
-  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-muted, #444); margin-bottom: 9px;
 }
-.section-val { font-family: monospace; color: var(--text-dim, #888); font-weight: 400; text-transform: none; }
 
-/* 模式卡 */
-.mode-cards { display: flex; flex-direction: column; gap: 5px; }
-.mode-card {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 9px 12px; border-radius: 7px;
+/* 预设按钮 */
+.preset-row { display: flex; gap: 5px; margin-bottom: 10px; }
+.preset-btn {
+  flex: 1; padding: 5px 4px; font-size: 11.5px; border-radius: 5px;
   background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
-  cursor: pointer; text-align: left; transition: all 0.15s;
+  color: var(--text-muted, #555); cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
-.mode-card:hover { border-color: var(--border-hover, #333); }
-.mode-card.active { border-color: var(--border-hover, #444); background: var(--ctrl-active, #1a1a1a); }
-.mode-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #ddd); }
-.mode-desc { font-size: 10.5px; color: var(--text-muted, #555); font-family: monospace; }
-.mode-card.active .mode-name { color: var(--text-primary, #eee); }
-.mode-card.active .mode-desc { color: var(--text-dim, #777); }
+.preset-btn:hover  { border-color: var(--border-hover, #333); color: var(--text-dim, #888); }
+.preset-btn.active { border-color: var(--border-hover, #444); color: var(--text-primary, #ddd); background: var(--ctrl-active, #1a1a1a); }
 
-/* 滑块 */
+/* 参数行 */
+.param-row { margin-bottom: 8px; }
+.param-label { font-size: 11px; color: var(--text-dim, #888); display: flex; justify-content: space-between; margin-bottom: 4px; }
+.param-val { font-family: monospace; color: var(--text-primary, #ccc); }
+
 .slider {
-  width: 100%; margin-bottom: 8px;
-  -webkit-appearance: none; height: 4px; border-radius: 2px;
+  width: 100%; -webkit-appearance: none; height: 3px; border-radius: 2px;
   background: var(--ctrl-active, #2a2a2a); outline: none; cursor: pointer;
 }
 .slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 14px; height: 14px;
-  border-radius: 50%; background: var(--text-dim, #888);
-  border: 2px solid var(--ctrl-active, #1a1a1a);
-  transition: background 0.15s;
+  -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--text-dim, #888); border: 2px solid var(--panel-bg, #0a0a0a); transition: background 0.15s;
 }
 .slider::-webkit-slider-thumb:hover { background: var(--text-primary, #ccc); }
 
-/* 提示框 */
 .hint-box {
-  font-size: 10.5px; color: var(--text-muted, #555);
-  line-height: 1.6; background: var(--ctrl-bg, #111);
-  border-radius: 5px; padding: 6px 8px;
+  font-size: 10.5px; color: var(--text-muted, #555); line-height: 1.6;
+  background: var(--ctrl-bg, #111); border-radius: 5px; padding: 6px 8px; margin-top: 8px;
 }
 
-/* Toggle */
+/* 导入按钮 */
+.import-btns { display: flex; gap: 6px; margin-bottom: 6px; }
+.btn-import {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 7px 4px; font-size: 11.5px; border-radius: 6px;
+  background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
+  color: var(--text-dim, #888); cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.btn-import:hover { border-color: var(--border-hover, #333); color: var(--text-primary, #ccc); }
+.add-hint { font-size: 10.5px; color: var(--text-muted, #555); text-align: center; }
+
+/* toggle */
 .toggle-row { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 .toggle-info { display: flex; flex-direction: column; gap: 2px; }
-.toggle-label { font-size: 12.5px; color: var(--text-primary, #ccc); }
-.toggle-sub   { font-size: 10.5px; color: var(--text-muted, #555); }
+.toggle-label { font-size: 12px; color: var(--text-primary, #ccc); }
+.toggle-sub   { font-size: 10px; color: var(--text-muted, #555); }
 .toggle-switch {
-  width: 38px; height: 22px; border-radius: 11px;
-  background: var(--ctrl-active, #222); border: 1px solid var(--border, #333);
-  position: relative; transition: background 0.2s; flex-shrink: 0;
+  width: 36px; height: 20px; border-radius: 10px; flex-shrink: 0;
+  background: var(--ctrl-active, #222); border: 1px solid var(--border, #333); position: relative; transition: all 0.2s;
 }
 .toggle-switch.on { background: #3a6ea8; border-color: #4a7ec0; }
 .toggle-knob {
-  position: absolute; top: 3px; left: 3px;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--text-muted, #666); transition: all 0.2s;
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: #666; transition: all 0.2s;
 }
-.toggle-switch.on .toggle-knob { left: 19px; background: #fff; }
+.toggle-switch.on .toggle-knob { left: 18px; background: #fff; }
 
-/* 添加文件 */
-.btn-add {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; padding: 9px;
-  background: var(--ctrl-bg, #111); border: 1px dashed var(--border, #2a2a2a);
-  border-radius: 6px; color: var(--text-dim, #888); font-size: 12.5px;
-  cursor: pointer; transition: all 0.15s; margin-bottom: 6px;
+.btn-overwrite {
+  width: 100%; justify-content: center;
+  background: rgba(224,100,50,0.1) !important; border-color: rgba(224,100,50,0.3) !important; color: #e06432 !important;
 }
-.btn-add:hover { border-color: var(--border-hover, #444); color: var(--text-primary, #ccc); }
-.add-hint { font-size: 10.5px; color: var(--text-muted, #555); text-align: center; }
+.btn-overwrite:hover:not(:disabled) { background: rgba(224,100,50,0.2) !important; }
+.overwrite-hint { font-size: 10.5px; color: var(--text-muted, #555); margin-top: 6px; line-height: 1.5; }
 
 /* 操作区 */
-.section-actions { display: flex; gap: 7px; flex-wrap: wrap; }
-
-/* 通用按钮 */
+.section-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 8px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+  padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
   background: var(--ctrl-active, #222); border: 1px solid var(--border-hover, #3a3a3a);
-  color: var(--text-primary, #ddd); cursor: pointer; transition: all 0.15s;
+  color: var(--text-primary, #ddd); cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
 .btn-primary:hover:not(:disabled) { background: #2a2a2a; border-color: #555; color: #fff; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-
 .btn-ghost {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 7px 12px; border-radius: 6px; font-size: 12px;
   background: transparent; border: 1px solid var(--border, #2a2a2a);
-  color: var(--text-muted, #555); cursor: pointer; transition: all 0.15s;
+  color: var(--text-muted, #555); cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
 .btn-ghost:hover:not(:disabled) { border-color: var(--border-hover, #444); color: var(--text-dim, #888); }
 .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -582,49 +727,48 @@ onBeforeUnmount(() => {
 .task-list::-webkit-scrollbar { width: 3px; }
 .task-list::-webkit-scrollbar-thumb { background: var(--scrollbar, #222); }
 .task-list-hd {
-  font-size: 10.5px; color: var(--text-muted, #555);
-  padding: 8px 16px 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 10.5px; color: var(--text-muted, #555); padding: 8px 14px 4px;
+  display: flex; align-items: center; gap: 6px;
 }
+.task-stats { margin-left: auto; font-size: 10px; color: var(--text-muted, #555); }
+.stat-done { color: #4caf78; }
+.stat-err  { color: #e05252; }
+
 .task-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 12px; cursor: pointer; transition: background 0.12s;
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  cursor: pointer; transition: background 0.12s;
   border-left: 2px solid transparent; position: relative;
 }
-.task-item:hover  { background: var(--ctrl-hover, #111); }
-.task-item.selected { background: var(--ctrl-active, #141414); border-left-color: var(--border-hover, #444); }
-.task-done.selected   { border-left-color: #4caf78; }
-.task-error.selected  { border-left-color: #e05252; }
+.task-item:hover     { background: var(--ctrl-hover, #111); }
+.task-item.selected  { background: var(--ctrl-active, #141414); border-left-color: var(--border-hover, #444); }
+.st-done.selected, .st-overwritten.selected { border-left-color: #4caf78; }
+.st-error.selected   { border-left-color: #e05252; }
 
 .task-thumb {
-  width: 36px; height: 36px; border-radius: 5px; flex-shrink: 0;
-  background: var(--ctrl-bg, #111);
-  border: 1px solid var(--border, #1e1e1e);
-  overflow: hidden; display: flex; align-items: center; justify-content: center;
-  /* checker background for transparency */
-  background-image: linear-gradient(45deg,#1a1a1a 25%,transparent 25%),
-                    linear-gradient(-45deg,#1a1a1a 25%,transparent 25%),
-                    linear-gradient(45deg,transparent 75%,#1a1a1a 75%),
-                    linear-gradient(-45deg,transparent 75%,#1a1a1a 75%);
-  background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  width: 34px; height: 34px; border-radius: 5px; flex-shrink: 0;
+  border: 1px solid var(--border, #1e1e1e); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.checker {
+  background-image: linear-gradient(45deg,#181818 25%,transparent 25%),linear-gradient(-45deg,#181818 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#181818 75%),linear-gradient(-45deg,transparent 75%,#181818 75%);
+  background-size: 8px 8px; background-position: 0 0,0 4px,4px -4px,-4px 0;
 }
 .task-thumb img { width: 100%; height: 100%; object-fit: contain; }
-.thumb-placeholder { color: var(--text-muted, #444); }
+.thumb-ph { color: var(--text-muted, #444); }
 
 .task-info { flex: 1; min-width: 0; }
-.task-name {
-  font-size: 11.5px; color: var(--text-primary, #ccc);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.task-meta { font-size: 10px; color: var(--text-muted, #555); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-.crop-size { color: #4caf78; }
-.task-badge {
-  font-size: 9.5px; padding: 1px 6px; border-radius: 10px;
-}
-.badge-idle       { background: rgba(100,100,100,0.2); color: #666; }
-.badge-processing { background: rgba(91,142,230,0.2);  color: #5b8ee6; }
-.badge-done       { background: rgba(76,175,120,0.2);  color: #4caf78; }
-.badge-error      { background: rgba(224,82,82,0.2);   color: #e05252; }
+.task-name { font-size: 11.5px; color: var(--text-primary, #ccc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-path { font-size: 9.5px; color: var(--text-muted, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.task-meta { font-size: 10px; color: var(--text-muted, #555); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.crop-arrow { color: #4caf78; }
+.task-badge { font-size: 9px; padding: 1px 5px; border-radius: 8px; }
+.badge-idle        { background: rgba(100,100,100,0.2); color: #666; }
+.badge-processing  { background: rgba(91,142,230,0.2); color: #5b8ee6; }
+.badge-done, .badge-overwritten { background: rgba(76,175,120,0.2); color: #4caf78; }
+.badge-skipped     { background: rgba(150,150,80,0.2); color: #aaaa55; }
+.badge-transparent { background: rgba(100,100,100,0.15); color: #666; }
+.badge-error       { background: rgba(224,82,82,0.2); color: #e05252; }
+.task-err          { font-size: 9.5px; color: #e05252; margin-top: 1px; }
 
 .task-btns { display: flex; gap: 2px; flex-shrink: 0; }
 .tbtn {
@@ -633,17 +777,16 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; justify-content: center;
   color: var(--text-muted, #555); transition: all 0.12s;
 }
-.tbtn:hover      { background: var(--ctrl-hover, #1a1a1a); color: var(--text-dim, #888); }
-.tbtn-dl:hover   { color: #4caf78; }
-.tbtn-rm:hover   { color: #e05252; }
+.tbtn:hover    { background: var(--ctrl-hover, #1a1a1a); color: var(--text-dim, #888); }
+.tbtn-dl:hover { color: #4caf78; }
+.tbtn-rm:hover { color: #e05252; }
 
-/* 空态 */
 .empty-hint {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px; color: var(--text-muted, #444);
-  padding: 32px 20px; cursor: pointer; text-align: center;
+  padding: 32px 20px; cursor: default; text-align: center;
 }
-.empty-hint p { font-size: 12px; }
+.empty-hint p { font-size: 12px; line-height: 1.6; }
 
 /* ── 右侧预览 ─────────────────────── */
 .preview-pane {
@@ -651,85 +794,74 @@ onBeforeUnmount(() => {
   overflow: hidden; background: var(--canvas-bg, #080808); position: relative;
 }
 .preview-pane::before {
-  content: ''; position: absolute; inset: 0;
-  background-image:
-    linear-gradient(var(--grid-line,rgba(255,255,255,0.015)) 1px, transparent 1px),
-    linear-gradient(90deg,var(--grid-line,rgba(255,255,255,0.015)) 1px, transparent 1px);
-  background-size: 40px 40px; pointer-events: none; z-index: 0;
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px);
+  background-size: 40px 40px; z-index: 0;
 }
 
 .preview-empty {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 12px; color: var(--text-muted, #333); z-index: 1;
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px; color: var(--text-muted, #333); z-index: 1;
 }
-.preview-empty p   { font-size: 13px; }
+.preview-empty p { font-size: 13px; }
 .preview-empty .sub { font-size: 11.5px; color: var(--text-muted, #444) !important; margin-top: -4px; }
 
-/* 对比视图 */
 .compare-wrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 24px; padding: 32px; z-index: 1; min-height: 0; overflow: hidden;
+  gap: 20px; padding: 28px; z-index: 1; min-height: 0; overflow: hidden;
 }
-
-.compare-side {
-  flex: 1; max-width: 46%; display: flex; flex-direction: column; align-items: center; gap: 10px;
-}
-.compare-label {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
-  color: var(--text-muted, #555);
-}
-.compare-img-wrap {
-  width: 100%; flex: 1; max-height: 460px;
-  border-radius: 6px; overflow: hidden; position: relative;
-  border: 1px solid var(--border, #1e1e1e);
+.compare-side { flex: 1; max-width: 46%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
+.compare-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #555); }
+.compare-img-box {
+  width: 100%; flex: 1; max-height: 440px; border-radius: 6px; overflow: hidden;
+  border: 1px solid var(--border, #1e1e1e); position: relative;
   display: flex; align-items: center; justify-content: center;
 }
-/* checkered for transparency */
-.checker {
-  background-image:
-    linear-gradient(45deg,#141414 25%,transparent 25%),
-    linear-gradient(-45deg,#141414 25%,transparent 25%),
-    linear-gradient(45deg,transparent 75%,#141414 75%),
-    linear-gradient(-45deg,transparent 75%,#141414 75%);
-  background-size: 16px 16px;
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+.cmp-canvas { max-width: 100%; max-height: 100%; display: block; image-rendering: pixelated; }
+.cmp-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(8,8,8,0.65); font-size: 12px; color: var(--text-muted, #555);
 }
-.compare-canvas {
-  max-width: 100%; max-height: 100%;
-  display: block; image-rendering: pixelated;
-}
-.canvas-overlay {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(8,8,8,0.6);
-  font-size: 12px; color: var(--text-muted, #555);
-}
-.compare-size {
-  font-size: 11px; color: var(--text-muted, #555);
-  display: flex; gap: 6px; align-items: center;
-}
-.saving { color: #4caf78; font-weight: 600; }
-.compare-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
+.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
+.saving   { color: #4caf78; font-weight: 600; }
+.no-change { color: #aaaa55; font-weight: 600; }
+.cmp-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
 
-/* 操作行 */
 .action-row {
   z-index: 1; flex-shrink: 0;
   border-top: 1px solid var(--border, #1e1e1e);
   background: var(--panel-bg, #0a0a0a);
-  padding: 14px 20px;
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 12px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
 .btn-dl {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; background: rgba(76,175,120,0.1);
+  padding: 7px 14px; background: rgba(76,175,120,0.1);
   border: 1px solid rgba(76,175,120,0.3); border-radius: 6px;
-  color: #4caf78; font-size: 12px; cursor: pointer; transition: all 0.15s;
+  color: #4caf78; font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
 .btn-dl:hover { background: rgba(76,175,120,0.2); }
 .error-msg {
-  font-size: 12px; color: #e05252;
+  font-size: 11.5px; color: #e05252;
   background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.2);
-  border-radius: 5px; padding: 6px 10px;
+  border-radius: 5px; padding: 5px 10px;
 }
+
+/* ── 确认弹窗 ─────────────────────── */
+.dialog-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 999;
+}
+.dialog {
+  background: var(--panel-bg, #0f0f0f); border: 1px solid var(--border-hover, #333);
+  border-radius: 10px; padding: 24px 28px; max-width: 440px; width: 90%;
+}
+.dialog-title { font-size: 15px; font-weight: 600; color: var(--text-primary, #ddd); margin-bottom: 12px; }
+.dialog-body  { font-size: 13px; color: var(--text-dim, #888); line-height: 1.7; margin-bottom: 20px; white-space: pre-line; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-danger-solid {
+  padding: 8px 18px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+  background: rgba(224,82,82,0.15); border: 1px solid rgba(224,82,82,0.4);
+  color: #e05252; cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.btn-danger-solid:hover { background: rgba(224,82,82,0.3); }
 </style>
