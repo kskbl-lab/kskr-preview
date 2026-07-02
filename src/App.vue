@@ -45,6 +45,25 @@
           <div class="sn-active-bar"></div>
         </button>
 
+        <button
+          class="sidenav-item"
+          :class="{ active: currentRoute === '/png-crop' }"
+          @click="navigate('/png-crop')"
+          title="裁剪PNG透明像素"
+        >
+          <div class="sn-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <polyline points="9 3 9 9 3 9"/>
+              <polyline points="15 3 15 9 21 9"/>
+              <polyline points="9 21 9 15 3 15"/>
+              <polyline points="15 21 15 15 21 15"/>
+            </svg>
+          </div>
+          <span class="sn-label">PNG裁剪</span>
+          <div class="sn-active-bar"></div>
+        </button>
+
         <!-- 分隔线 -->
         <div class="sn-divider"></div>
       </nav>
