@@ -60,7 +60,7 @@
               <polyline points="15 21 15 15 21 15"/>
             </svg>
           </div>
-          <span class="sn-label">PNG裁剪</span>
+          <span class="sn-label">PNG裁剪器</span>
           <div class="sn-active-bar"></div>
         </button>
 

@@ -4,7 +4,7 @@
     <!-- ── 左侧控制面板 ─────────────────────── -->
     <div class="ctrl-panel">
       <div class="panel-header">
-        <span class="panel-title">裁剪 PNG 透明像素</span>
+        <span class="panel-title">PNG 透明边缘裁剪器</span>
       </div>
 
       <!-- 模式切换 -->
@@ -600,7 +600,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 
 /* ── 左侧面板 ─────────────────────── */
 .ctrl-panel {
-  width: 310px; flex-shrink: 0;
+  width: 400px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
   border-right: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow-y: auto;
@@ -751,7 +751,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 .stat-err  { color: #e05252; }
 
 .task-item {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
   cursor: pointer; transition: background 0.12s;
   border-left: 2px solid transparent; position: relative;
 }
@@ -761,7 +761,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 .st-error.selected   { border-left-color: #e05252; }
 
 .task-thumb {
-  width: 34px; height: 34px; border-radius: 5px; flex-shrink: 0;
+  width: 48px; height: 48px; border-radius: 6px; flex-shrink: 0;
   border: 1px solid var(--border, #1e1e1e); overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
@@ -773,7 +773,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 .thumb-ph { color: var(--text-muted, #444); }
 
 .task-info { flex: 1; min-width: 0; }
-.task-name { font-size: 11.5px; color: var(--text-primary, #ccc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-name { font-size: 12px; color: var(--text-primary, #ccc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .task-path { font-size: 9.5px; color: var(--text-muted, #555); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .task-meta { font-size: 10px; color: var(--text-muted, #555); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .crop-arrow { color: #4caf78; }
