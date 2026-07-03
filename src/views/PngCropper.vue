@@ -102,14 +102,85 @@
         </div>
       </template>
 
+      <!-- ── 任务列表 ──────────────────── -->
+      <div v-if="tasks.length">
+        <div class="file-panel-hd">
+          <span class="file-panel-title">文件列表<span class="file-count" v-if="tasks.length">({{ tasks.length }})</span></span>
+          <span class="task-stats">
+            <span class="stat-done">{{ doneCount }} 完成</span>
+            <span v-if="skipCount"> · {{ skipCount }} 跳过</span>
+            <span v-if="errorCount" class="stat-err"> · {{ errorCount }} 失败</span>
+          </span>
+        </div>
+        <div class="file-panel-actions">
+          <template v-if="pageMode === 'safe'">
+            <button class="btn-primary btn-sm" :disabled="isProcessing" @click="processAllSafe">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              {{ isProcessing ? '处理中…' : '全部裁剪' }}
+            </button>
+            <button class="btn-ghost btn-sm" :disabled="!hasAnyDone || isProcessing" @click="downloadZip">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              下载 ZIP
+            </button>
+          </template>
+          <template v-if="pageMode === 'overwrite' && hasFSAPI">
+            <button class="btn-primary btn-overwrite btn-sm" @click="processAllOverwrite" :disabled="isProcessing">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              {{ isProcessing ? '覆盖中…' : '全部裁剪并覆盖' }}
+            </button>
+          </template>
+          <button class="btn-ghost btn-danger btn-sm" @click="clearAll">清空</button>
+        </div>
+        <div class="task-list">
+          <div
+            v-for="task in tasks" :key="task.id"
+            class="task-item"
+            :class="['st-' + task.status, { selected: selectedId === task.id }]"
+            @click="selectTask(task)"
+          >
+            <div class="task-thumb checker">
+              <img v-if="task.previewUrl" :src="task.previewUrl" />
+              <div v-else class="thumb-ph">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+            </div>
+            <div class="task-info">
+              <div class="task-name" :title="task.relPath || task.file.name">{{ task.file.name }}</div>
+              <div class="task-path" v-if="task.relPath && task.relPath !== task.file.name">{{ task.relPath }}</div>
+              <div class="task-meta">
+                <span v-if="task.origW">{{ task.origW }}×{{ task.origH }}</span>
+                <span v-if="task.cropW && (task.status === 'done' || task.status === 'overwritten')" class="crop-arrow">→ {{ task.cropW }}×{{ task.cropH }}</span>
+                <span class="task-badge" :class="'badge-' + task.status">{{ statusLabel(task.status) }}</span>
+              </div>
+              <div v-if="task.errorMsg" class="task-err">{{ task.errorMsg }}</div>
+            </div>
+            <div class="task-btns" @click.stop>
+              <button v-if="pageMode === 'safe' && task.status === 'done'" class="tbtn tbtn-dl" @click="downloadSingle(task)" title="单独下载">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </button>
+              <button class="tbtn tbtn-rm" @click="removeTask(task)" title="移除">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空态 -->
+      <div v-else class="empty-hint" @dragover.prevent @drop.prevent="onDropGlobal">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <p v-if="pageMode === 'safe'">拖拽 PNG 文件 / 文件夹到此处<br>或点击上方按钮添加</p>
+        <p v-else>拖拽 PNG 文件到此处<br>或点击上方按钮添加</p>
+        <p class="sub" v-if="pageMode === 'overwrite'">覆盖模式需要浏览器弹窗授权写入权限</p>
+      </div>
     </div>
 
-    <!-- ── 中间：裁剪对比预览区 ──────────────── -->
-    <div class="preview-pane">
+    <!-- ── 右侧预览区 ───────────────────────── -->
+    <div class="preview-pane" @dragover.prevent @drop.prevent="onDropGlobal">
       <div v-if="!selectedTask" class="preview-empty">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>从右侧文件列表选择文件查看裁剪对比</p>
-        <p class="sub">或拖拽 PNG 到右侧列表区域导入</p>
+        <p>点击左侧文件查看裁剪对比</p>
+        <p class="sub">或拖拽 PNG 文件 / 文件夹到此处</p>
       </div>
       <template v-if="selectedTask">
         <div class="compare-wrap">
@@ -147,87 +218,6 @@
           <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
         </div>
       </template>
-    </div>
-
-    <!-- ── 右侧：文件列表面板 ──────────────── -->
-    <div class="file-panel" @dragover.prevent @drop.prevent="onDropGlobal">
-
-      <!-- 列表头 + 批量操作 -->
-      <div class="file-panel-hd">
-        <span class="file-panel-title">
-          文件列表
-          <span class="file-count" v-if="tasks.length">({{ tasks.length }})</span>
-        </span>
-        <span class="task-stats" v-if="tasks.length">
-          <span class="stat-done">{{ doneCount }} 完成</span>
-          <span v-if="skipCount"> · {{ skipCount }} 跳过</span>
-          <span v-if="errorCount" class="stat-err"> · {{ errorCount }} 失败</span>
-        </span>
-      </div>
-
-      <!-- 批量操作按钮 -->
-      <div v-if="tasks.length" class="file-panel-actions">
-        <template v-if="pageMode === 'safe'">
-          <button class="btn-primary btn-sm" :disabled="isProcessing" @click="processAllSafe">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {{ isProcessing ? '处理中…' : '全部裁剪' }}
-          </button>
-          <button class="btn-ghost btn-sm" :disabled="!hasAnyDone || isProcessing" @click="downloadZip">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            下载 ZIP
-          </button>
-        </template>
-        <template v-if="pageMode === 'overwrite' && hasFSAPI">
-          <button class="btn-primary btn-overwrite btn-sm" @click="processAllOverwrite" :disabled="isProcessing">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {{ isProcessing ? '覆盖中…' : '全部裁剪并覆盖' }}
-          </button>
-        </template>
-        <button class="btn-ghost btn-danger btn-sm" @click="clearAll">清空</button>
-      </div>
-
-      <!-- 文件列表 -->
-      <div v-if="tasks.length" class="task-list">
-        <div
-          v-for="task in tasks" :key="task.id"
-          class="task-item"
-          :class="['st-' + task.status, { selected: selectedId === task.id }]"
-          @click="selectTask(task)"
-        >
-          <div class="task-thumb checker">
-            <img v-if="task.previewUrl" :src="task.previewUrl" />
-            <div v-else class="thumb-ph">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            </div>
-          </div>
-          <div class="task-info">
-            <div class="task-name" :title="task.relPath || task.file.name">{{ task.file.name }}</div>
-            <div class="task-path" v-if="task.relPath && task.relPath !== task.file.name">{{ task.relPath }}</div>
-            <div class="task-meta">
-              <span v-if="task.origW">{{ task.origW }}×{{ task.origH }}</span>
-              <span v-if="task.cropW && (task.status === 'done' || task.status === 'overwritten')" class="crop-arrow">→ {{ task.cropW }}×{{ task.cropH }}</span>
-              <span class="task-badge" :class="'badge-' + task.status">{{ statusLabel(task.status) }}</span>
-            </div>
-            <div v-if="task.errorMsg" class="task-err">{{ task.errorMsg }}</div>
-          </div>
-          <div class="task-btns" @click.stop>
-            <button v-if="pageMode === 'safe' && task.status === 'done'" class="tbtn tbtn-dl" @click="downloadSingle(task)" title="单独下载">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button class="tbtn tbtn-rm" @click="removeTask(task)" title="移除">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 空态 -->
-      <div v-else class="file-panel-empty">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p v-if="pageMode === 'safe'">拖拽 PNG 文件 / 文件夹<br>或点击左侧按钮导入</p>
-        <p v-else>拖拽 PNG 文件到此处<br>或点击左侧按钮导入</p>
-        <p class="sub" v-if="pageMode === 'overwrite'">覆盖模式需浏览器授权写入权限</p>
-      </div>
     </div>
 
     <!-- 确认弹窗 -->
@@ -719,7 +709,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 
 /* ── 左侧设置面板 ─────────────────── */
 .ctrl-panel {
-  width: 300px; flex-shrink: 0;
+  width: 400px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
   border-right: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow-y: auto;
@@ -827,11 +817,10 @@ onBeforeUnmount(() => { tasks.value = [] })
   border-radius: 6px; padding: 8px 10px; line-height: 1.6;
 }
 
-/* 裁剪对比（中间预览区） */
+/* 裁剪对比（右侧预览区） */
 .preview-pane {
   flex: 1; display: flex; flex-direction: column;
   overflow: hidden; background: var(--canvas-bg, #080808); position: relative;
-  border-right: 1px solid var(--border, #1e1e1e);
 }
 .preview-pane::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
@@ -900,28 +889,20 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 .btn-dl:hover { background: rgba(76,175,120,0.2); }
 
-/* ── 右侧文件列表面板 ─────────────── */
-.file-panel {
-  width: 340px; flex-shrink: 0;
-  background: var(--panel-bg, #0a0a0a);
-  border-left: 1px solid var(--border, #1e1e1e);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-
+/* 文件列表（左侧面板内） */
 .file-panel-hd {
-  flex-shrink: 0; padding: 12px 14px 8px;
-  border-bottom: 1px solid var(--border, #1e1e1e);
+  padding: 8px 14px 4px;
   display: flex; align-items: center; gap: 6px;
 }
-.file-panel-title { font-size: 12px; font-weight: 600; color: var(--text-primary, #ccc); }
-.file-count { color: var(--text-muted, #555); font-weight: 400; }
+.file-panel-title { font-size: 10.5px; color: var(--text-muted, #555); }
+.file-count { font-weight: 400; }
 .task-stats { margin-left: auto; font-size: 10px; color: var(--text-muted, #555); }
 .stat-done { color: #4caf78; }
 .stat-err  { color: #e05252; }
 
 .file-panel-actions {
-  flex-shrink: 0; display: flex; gap: 5px; flex-wrap: wrap;
-  padding: 8px 12px; border-bottom: 1px solid var(--border, #1e1e1e);
+  display: flex; gap: 5px; flex-wrap: wrap;
+  padding: 0 14px 8px;
 }
 
 .task-list { flex: 1; overflow-y: auto; }
@@ -939,7 +920,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 .st-error.selected   { border-left-color: #e05252; }
 
 .task-thumb {
-  width: 52px; height: 52px; border-radius: 6px; flex-shrink: 0;
+  width: 48px; height: 48px; border-radius: 6px; flex-shrink: 0;
   border: 1px solid var(--border, #1e1e1e); overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
@@ -975,13 +956,14 @@ onBeforeUnmount(() => { tasks.value = [] })
 .tbtn-dl:hover { color: #4caf78; }
 .tbtn-rm:hover { color: #e05252; }
 
-.file-panel-empty {
+.file-panel-empty,
+.empty-hint {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px; color: var(--text-muted, #444);
   padding: 32px 20px; cursor: default; text-align: center;
 }
-.file-panel-empty p { font-size: 12px; line-height: 1.6; }
-.file-panel-empty .sub { font-size: 10.5px; color: var(--text-muted, #555) !important; }
+.empty-hint p, .file-panel-empty p { font-size: 12px; line-height: 1.6; }
+.empty-hint .sub, .file-panel-empty .sub { font-size: 10.5px; color: var(--text-muted, #555) !important; }
 
 /* canvas */
 .cmp-canvas { max-width: 100%; max-height: 100%; display: block; image-rendering: pixelated; }
