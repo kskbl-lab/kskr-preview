@@ -102,51 +102,51 @@
         </div>
       </template>
 
-      <!-- ── 当前选中文件预览 ──────────────── -->
-      <div v-if="selectedTask" class="section section-preview">
-        <div class="section-title">裁剪对比</div>
-        <div class="compare-mini">
-          <div class="cmp-mini-side">
-            <div class="cmp-mini-label">原图</div>
-            <div class="cmp-mini-box checker">
+    </div>
+
+    <!-- ── 中间：裁剪对比预览区 ──────────────── -->
+    <div class="preview-pane">
+      <div v-if="!selectedTask" class="preview-empty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <p>从右侧文件列表选择文件查看裁剪对比</p>
+        <p class="sub">或拖拽 PNG 到右侧列表区域导入</p>
+      </div>
+      <template v-if="selectedTask">
+        <div class="compare-wrap">
+          <div class="compare-side">
+            <div class="compare-label">原图</div>
+            <div class="compare-img-box checker">
               <canvas ref="origCanvas" class="cmp-canvas"></canvas>
             </div>
-            <div class="cmp-mini-size" v-if="selectedTask.origW">{{ selectedTask.origW }}×{{ selectedTask.origH }}</div>
+            <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
           </div>
-          <div class="cmp-mini-arrow">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <div class="cmp-arrow">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </div>
-          <div class="cmp-mini-side">
-            <div class="cmp-mini-label">裁剪后</div>
-            <div class="cmp-mini-box checker">
+          <div class="compare-side">
+            <div class="compare-label">裁剪后</div>
+            <div class="compare-img-box checker">
               <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
               <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
-                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '未处理' }}</span>
+                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
               </div>
             </div>
-            <div class="cmp-mini-size" v-if="selectedTask.cropW">
-              {{ selectedTask.cropW }}×{{ selectedTask.cropH }}
-              <span v-if="selectedTask.savingPct > 0" class="saving">-{{ selectedTask.savingPct }}%</span>
-              <span v-if="selectedTask.savingPct === 0" class="no-change">无变化</span>
+            <div class="compare-size" v-if="selectedTask.cropW">
+              {{ selectedTask.cropW }} × {{ selectedTask.cropH }}
+              <span v-if="selectedTask.savingPct > 0" class="saving">节省 {{ selectedTask.savingPct }}%</span>
+              <span v-if="selectedTask.savingPct === 0" class="no-change">无需裁剪</span>
             </div>
           </div>
         </div>
-        <div class="action-row-inline">
-          <button class="btn-primary btn-sm" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
-          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl btn-sm" @click="downloadSingle(selectedTask)">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            下载
+        <div class="action-row">
+          <button class="btn-primary" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
+          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl" @click="downloadSingle(selectedTask)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 {{ selectedTask.file.name }}
           </button>
+          <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
         </div>
-        <div v-if="selectedTask.errorMsg" class="error-msg-inline">{{ selectedTask.errorMsg }}</div>
-      </div>
-      <div v-else class="section section-preview-empty">
-        <div class="section-title">裁剪对比</div>
-        <div class="preview-empty-hint">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          <span>从右侧文件列表选择文件</span>
-        </div>
-      </div>
+      </template>
     </div>
 
     <!-- ── 右侧：文件列表面板 ──────────────── -->
@@ -312,53 +312,44 @@ function onDropGlobal(e) {
 
 async function onDropOverwrite(e) {
   const items = Array.from(e.dataTransfer?.items || [])
-  const pngItems = items.filter(item => item.kind === 'file' && (item.type === 'image/png' || item.type === ''))
+  const pngItems = items.filter(item => item.kind === 'file')
   if (!pngItems.length) return
 
-  // 尝试用 File System Access API 获取可写句柄
-  const handles = []
-  const fallbackFiles = []
-  for (const item of pngItems) {
-    if (typeof item.getAsFileSystemHandle === 'function') {
-      try {
-        const fh = await item.getAsFileSystemHandle()
-        if (fh && fh.kind === 'file') {
-          handles.push(fh)
-          continue
-        }
-      } catch {}
-    }
-    // 降级处理：拿普通 File 对象（无法写回原文件）
-    const f = item.getAsFile()
-    if (f && /\.png$/i.test(f.name)) fallbackFiles.push(f)
+  // 先同步收集所有普通 File 对象，用于过滤 PNG
+  const plainFiles = pngItems.map(item => item.getAsFile()).filter(f => f && /\.png$/i.test(f.name))
+
+  if (!plainFiles.length) return
+
+  // 尝试用 File System Access API 获取可写句柄（拖拽来的文件不需要额外申请权限，直接 createWritable 即可）
+  const supportsHandle = typeof pngItems[0].getAsFileSystemHandle === 'function'
+
+  if (!supportsHandle) {
+    folderPickError.value = '拖入的文件无法在覆盖模式下直接写回。\n请改用【批量选择 PNG】按钮选文件，或切换到安全模式使用拖入。'
+    return
   }
 
-  if (!handles.length && !fallbackFiles.length) return
+  // 并行获取所有 FileSystemFileHandle
+  const handleResults = await Promise.allSettled(
+    pngItems.map(item => item.getAsFileSystemHandle())
+  )
 
-  if (fallbackFiles.length && !handles.length) {
-    // 全部都是降级模式，提示用户
+  const writable = []
+  for (let i = 0; i < handleResults.length; i++) {
+    const result = handleResults[i]
+    if (result.status !== 'fulfilled') continue
+    const fh = result.value
+    if (!fh || fh.kind !== 'file') continue
+    const file = plainFiles[i]
+    if (!file || !/\.png$/i.test(file.name)) continue
+    writable.push({ fh, file })
+  }
+
+  if (!writable.length) {
     folderPickError.value = '拖入的文件无法在覆盖模式下直接写回。\n请改用【批量选择 PNG】按钮选文件，或切换到安全模式使用拖入。'
     return
   }
 
   folderPickError.value = ''
-  // 请求 readwrite 权限
-  const writable = []
-  for (const fh of handles) {
-    try {
-      const perm = await fh.requestPermission({ mode: 'readwrite' })
-      if (perm === 'granted') {
-        const file = await fh.getFile()
-        if (/\.png$/i.test(file.name)) writable.push({ fh, file })
-      }
-    } catch {}
-  }
-
-  if (!writable.length) {
-    folderPickError.value = '权限申请被拒绝，无法写回原文件。'
-    return
-  }
-
   for (const { fh, file } of writable) {
     const task = makeTask(file, file.name, fh, null)
     tasks.value.push(task)
@@ -836,33 +827,46 @@ onBeforeUnmount(() => { tasks.value = [] })
   border-radius: 6px; padding: 8px 10px; line-height: 1.6;
 }
 
-/* 裁剪对比（左侧内嵌） */
-.section-preview { flex: 1; min-height: 0; }
-.section-preview-empty { flex: 1; }
-.preview-empty-hint {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 20px 0; color: var(--text-muted, #444); text-align: center;
+/* 裁剪对比（中间预览区） */
+.preview-pane {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; background: var(--canvas-bg, #080808); position: relative;
+  border-right: 1px solid var(--border, #1e1e1e);
 }
-.preview-empty-hint span { font-size: 11px; }
-
-.compare-mini {
-  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px;
+.preview-pane::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px);
+  background-size: 40px 40px; z-index: 0;
 }
-.cmp-mini-side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-.cmp-mini-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted, #555); }
-.cmp-mini-box {
-  width: 100%; aspect-ratio: 1; max-height: 100px; border-radius: 5px; overflow: hidden;
+.preview-empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px; color: var(--text-muted, #333); z-index: 1;
+}
+.preview-empty p { font-size: 13px; }
+.preview-empty .sub { font-size: 11.5px; color: var(--text-muted, #444) !important; margin-top: -4px; }
+.compare-wrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 20px; padding: 28px; z-index: 1; min-height: 0; overflow: hidden;
+}
+.compare-side { flex: 1; max-width: 46%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
+.compare-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #555); }
+.compare-img-box {
+  width: 100%; flex: 1; max-height: 440px; border-radius: 6px; overflow: hidden;
   border: 1px solid var(--border, #1e1e1e); position: relative;
   display: flex; align-items: center; justify-content: center;
 }
-.cmp-mini-size { font-size: 9.5px; color: var(--text-muted, #555); }
-.cmp-mini-arrow { flex-shrink: 0; padding-top: 30px; color: var(--text-muted, #444); }
-
-.action-row-inline { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.error-msg-inline {
-  margin-top: 6px; font-size: 11px; color: #e05252;
+.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
+.cmp-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
+.action-row {
+  z-index: 1; flex-shrink: 0;
+  border-top: 1px solid var(--border, #1e1e1e);
+  background: var(--panel-bg, #0a0a0a);
+  padding: 12px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.error-msg {
+  font-size: 11.5px; color: #e05252;
   background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.2);
-  border-radius: 5px; padding: 4px 8px;
+  border-radius: 5px; padding: 5px 10px;
 }
 
 /* 公共按钮 */
