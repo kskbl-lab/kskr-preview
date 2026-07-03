@@ -173,6 +173,11 @@
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <p>拖拽 PNG 文件 / 文件夹到此处<br>或点击上方按钮添加</p>
       </div>
+      <div v-else-if="pageMode === 'overwrite'" class="empty-hint" @dragover.prevent @drop.prevent="onDropGlobal">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <p>拖拽 PNG 文件到此处<br>或点击左侧按钮添加</p>
+        <p class="sub">覆盖模式需要浏览器弹窗授权写入权限</p>
+      </div>
     </div>
 
     <!-- ── 右侧预览区 ───────────────────────── -->
@@ -299,9 +304,71 @@ function onFolderPick(e) {
 }
 
 function onDropGlobal(e) {
-  if (pageMode.value !== 'safe') return
-  const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === 'image/png' || /\.png$/i.test(f.name))
-  if (files.length) addFiles(files, false)
+  if (pageMode.value === 'safe') {
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === 'image/png' || /\.png$/i.test(f.name))
+    if (files.length) addFiles(files, false)
+  } else if (pageMode.value === 'overwrite') {
+    onDropOverwrite(e)
+  }
+}
+
+async function onDropOverwrite(e) {
+  const items = Array.from(e.dataTransfer?.items || [])
+  const pngItems = items.filter(item => item.kind === 'file' && (item.type === 'image/png' || item.type === ''))
+  if (!pngItems.length) return
+
+  // 尝试用 File System Access API 获取可写句柄
+  const handles = []
+  const fallbackFiles = []
+  for (const item of pngItems) {
+    if (typeof item.getAsFileSystemHandle === 'function') {
+      try {
+        const fh = await item.getAsFileSystemHandle()
+        if (fh && fh.kind === 'file') {
+          handles.push(fh)
+          continue
+        }
+      } catch {}
+    }
+    // 降级处理：拿普通 File 对象（无法写回原文件）
+    const f = item.getAsFile()
+    if (f && /\.png$/i.test(f.name)) fallbackFiles.push(f)
+  }
+
+  if (!handles.length && !fallbackFiles.length) return
+
+  if (fallbackFiles.length && !handles.length) {
+    // 全部都是降级模式，提示用户
+    folderPickError.value = '拖入的文件无法在覆盖模式下直接写回。\n请改用【批量选择 PNG】按钮选文件，或切换到安全模式使用拖入。'
+    return
+  }
+
+  folderPickError.value = ''
+  // 请求 readwrite 权限
+  const writable = []
+  for (const fh of handles) {
+    try {
+      const perm = await fh.requestPermission({ mode: 'readwrite' })
+      if (perm === 'granted') {
+        const file = await fh.getFile()
+        if (/\.png$/i.test(file.name)) writable.push({ fh, file })
+      }
+    } catch {}
+  }
+
+  if (!writable.length) {
+    folderPickError.value = '权限申请被拒绝，无法写回原文件。'
+    return
+  }
+
+  for (const { fh, file } of writable) {
+    const task = makeTask(file, file.name, fh, null)
+    tasks.value.push(task)
+    loadPreview(task)
+    if (!selectedId.value) selectedId.value = task.id
+  }
+
+  await processAllOverwrite()
 }
 
 function addFiles(files, fromFolder) {
