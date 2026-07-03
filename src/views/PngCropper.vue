@@ -1,7 +1,7 @@
 <template>
   <div class="cropper-page">
 
-    <!-- ── 左侧控制面板 ─────────────────────── -->
+    <!-- ── 左侧：设置面板 ──────────────────── -->
     <div class="ctrl-panel">
       <div class="panel-header">
         <span class="panel-title">PNG 透明边缘裁剪器</span>
@@ -69,18 +69,6 @@
           </div>
           <div class="add-hint">支持多选 PNG；文件夹导入保留相对路径</div>
         </div>
-
-        <div v-if="tasks.length" class="section section-actions">
-          <button class="btn-primary" :disabled="isProcessing" @click="processAllSafe">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {{ isProcessing ? '处理中…' : '全部裁剪' }}
-          </button>
-          <button class="btn-ghost" :disabled="!hasAnyDone || isProcessing" @click="downloadZip">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            下载 ZIP
-          </button>
-          <button class="btn-ghost btn-danger" @click="clearAll">清空</button>
-        </div>
       </template>
 
       <!-- ── 覆盖模式：导入 ──────────────── -->
@@ -112,29 +100,94 @@
           <div class="add-hint">批量选 PNG 或整个文件夹；处理后直接写回原文件</div>
           <div v-if="folderPickError" class="folder-pick-error">{{ folderPickError }}</div>
         </div>
-
-        <div v-if="tasks.length" class="section section-actions">
-          <button class="btn-primary btn-overwrite" @click="processAllOverwrite" :disabled="isProcessing">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {{ isProcessing ? '覆盖处理中…' : '全部裁剪并覆盖' }}
-          </button>
-        </div>
-
-        <div v-if="tasks.length" class="section section-actions">
-          <button class="btn-ghost btn-danger" @click="clearAll">清空列表</button>
-        </div>
       </template>
 
-      <!-- ── 任务列表 ──────────────────── -->
-      <div v-if="tasks.length" class="task-list">
-        <div class="task-list-hd">
-          文件列表 ({{ tasks.length }})
-          <span class="task-stats">
-            <span class="stat-done">{{ doneCount }} 完成</span>
-            <span v-if="skipCount"> · {{ skipCount }} 跳过</span>
-            <span v-if="errorCount" class="stat-err"> · {{ errorCount }} 失败</span>
-          </span>
+      <!-- ── 当前选中文件预览 ──────────────── -->
+      <div v-if="selectedTask" class="section section-preview">
+        <div class="section-title">裁剪对比</div>
+        <div class="compare-mini">
+          <div class="cmp-mini-side">
+            <div class="cmp-mini-label">原图</div>
+            <div class="cmp-mini-box checker">
+              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
+            </div>
+            <div class="cmp-mini-size" v-if="selectedTask.origW">{{ selectedTask.origW }}×{{ selectedTask.origH }}</div>
+          </div>
+          <div class="cmp-mini-arrow">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </div>
+          <div class="cmp-mini-side">
+            <div class="cmp-mini-label">裁剪后</div>
+            <div class="cmp-mini-box checker">
+              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
+              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
+                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '未处理' }}</span>
+              </div>
+            </div>
+            <div class="cmp-mini-size" v-if="selectedTask.cropW">
+              {{ selectedTask.cropW }}×{{ selectedTask.cropH }}
+              <span v-if="selectedTask.savingPct > 0" class="saving">-{{ selectedTask.savingPct }}%</span>
+              <span v-if="selectedTask.savingPct === 0" class="no-change">无变化</span>
+            </div>
+          </div>
         </div>
+        <div class="action-row-inline">
+          <button class="btn-primary btn-sm" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
+          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl btn-sm" @click="downloadSingle(selectedTask)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载
+          </button>
+        </div>
+        <div v-if="selectedTask.errorMsg" class="error-msg-inline">{{ selectedTask.errorMsg }}</div>
+      </div>
+      <div v-else class="section section-preview-empty">
+        <div class="section-title">裁剪对比</div>
+        <div class="preview-empty-hint">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>从右侧文件列表选择文件</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 右侧：文件列表面板 ──────────────── -->
+    <div class="file-panel" @dragover.prevent @drop.prevent="onDropGlobal">
+
+      <!-- 列表头 + 批量操作 -->
+      <div class="file-panel-hd">
+        <span class="file-panel-title">
+          文件列表
+          <span class="file-count" v-if="tasks.length">({{ tasks.length }})</span>
+        </span>
+        <span class="task-stats" v-if="tasks.length">
+          <span class="stat-done">{{ doneCount }} 完成</span>
+          <span v-if="skipCount"> · {{ skipCount }} 跳过</span>
+          <span v-if="errorCount" class="stat-err"> · {{ errorCount }} 失败</span>
+        </span>
+      </div>
+
+      <!-- 批量操作按钮 -->
+      <div v-if="tasks.length" class="file-panel-actions">
+        <template v-if="pageMode === 'safe'">
+          <button class="btn-primary btn-sm" :disabled="isProcessing" @click="processAllSafe">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            {{ isProcessing ? '处理中…' : '全部裁剪' }}
+          </button>
+          <button class="btn-ghost btn-sm" :disabled="!hasAnyDone || isProcessing" @click="downloadZip">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 ZIP
+          </button>
+        </template>
+        <template v-if="pageMode === 'overwrite' && hasFSAPI">
+          <button class="btn-primary btn-overwrite btn-sm" @click="processAllOverwrite" :disabled="isProcessing">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            {{ isProcessing ? '覆盖中…' : '全部裁剪并覆盖' }}
+          </button>
+        </template>
+        <button class="btn-ghost btn-danger btn-sm" @click="clearAll">清空</button>
+      </div>
+
+      <!-- 文件列表 -->
+      <div v-if="tasks.length" class="task-list">
         <div
           v-for="task in tasks" :key="task.id"
           class="task-item"
@@ -169,67 +222,12 @@
       </div>
 
       <!-- 空态 -->
-      <div v-else-if="pageMode === 'safe'" class="empty-hint" @dragover.prevent @drop.prevent="onDropGlobal">
+      <div v-else class="file-panel-empty">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>拖拽 PNG 文件 / 文件夹到此处<br>或点击上方按钮添加</p>
+        <p v-if="pageMode === 'safe'">拖拽 PNG 文件 / 文件夹<br>或点击左侧按钮导入</p>
+        <p v-else>拖拽 PNG 文件到此处<br>或点击左侧按钮导入</p>
+        <p class="sub" v-if="pageMode === 'overwrite'">覆盖模式需浏览器授权写入权限</p>
       </div>
-      <div v-else-if="pageMode === 'overwrite'" class="empty-hint" @dragover.prevent @drop.prevent="onDropGlobal">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>拖拽 PNG 文件到此处<br>或点击左侧按钮添加</p>
-        <p class="sub">覆盖模式需要浏览器弹窗授权写入权限</p>
-      </div>
-    </div>
-
-    <!-- ── 右侧预览区 ───────────────────────── -->
-    <div class="preview-pane" @dragover.prevent @drop.prevent="onDropGlobal">
-
-      <div v-if="!selectedTask" class="preview-empty">
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>点击左侧文件查看裁剪对比</p>
-        <p class="sub">或拖拽 PNG 文件 / 文件夹到此处</p>
-      </div>
-
-      <template v-if="selectedTask">
-        <div class="compare-wrap">
-          <!-- 原图 -->
-          <div class="compare-side">
-            <div class="compare-label">原图</div>
-            <div class="compare-img-box checker">
-              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
-            </div>
-            <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
-          </div>
-
-          <div class="cmp-arrow">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </div>
-
-          <!-- 裁剪后 -->
-          <div class="compare-side">
-            <div class="compare-label">裁剪后</div>
-            <div class="compare-img-box checker">
-              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
-              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
-                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
-              </div>
-            </div>
-            <div class="compare-size" v-if="selectedTask.cropW">
-              {{ selectedTask.cropW }} × {{ selectedTask.cropH }}
-              <span v-if="selectedTask.savingPct > 0" class="saving">节省 {{ selectedTask.savingPct }}%</span>
-              <span v-if="selectedTask.savingPct === 0" class="no-change">无需裁剪</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="action-row">
-          <button class="btn-primary" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
-          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl" @click="downloadSingle(selectedTask)">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            下载 {{ selectedTask.file.name }}
-          </button>
-          <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
-        </div>
-      </template>
     </div>
 
     <!-- 确认弹窗 -->
@@ -728,9 +726,9 @@ onBeforeUnmount(() => { tasks.value = [] })
   background: var(--app-bg, #080808);
 }
 
-/* ── 左侧面板 ─────────────────────── */
+/* ── 左侧设置面板 ─────────────────── */
 .ctrl-panel {
-  width: 400px; flex-shrink: 0;
+  width: 300px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
   border-right: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow-y: auto;
@@ -784,16 +782,6 @@ onBeforeUnmount(() => { tasks.value = [] })
 .mode-desc { font-size: 10px; color: var(--text-muted, #555); font-family: monospace; }
 .mode-card.active .mode-desc { color: var(--text-dim, #777); }
 
-/* 预设按钮（旧，保留以防万一） */
-.preset-row { display: flex; gap: 5px; margin-bottom: 10px; }
-.preset-btn {
-  flex: 1; padding: 5px 4px; font-size: 11.5px; border-radius: 5px;
-  background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
-  color: var(--text-muted, #555); cursor: pointer; transition: all 0.15s; font-family: inherit;
-}
-.preset-btn:hover  { border-color: var(--border-hover, #333); color: var(--text-dim, #888); }
-.preset-btn.active { border-color: var(--border-hover, #444); color: var(--text-primary, #ddd); background: var(--ctrl-active, #1a1a1a); }
-
 /* 参数行 */
 .param-row { margin-bottom: 8px; }
 .param-label { font-size: 11px; color: var(--text-dim, #888); display: flex; justify-content: space-between; margin-bottom: 4px; }
@@ -822,7 +810,8 @@ onBeforeUnmount(() => { tasks.value = [] })
   background: var(--ctrl-bg, #111); border: 1px solid var(--border, #1e1e1e);
   color: var(--text-dim, #888); cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
-.btn-import:hover { border-color: var(--border-hover, #333); color: var(--text-primary, #ccc); }
+.btn-import:hover:not(:disabled) { border-color: var(--border-hover, #333); color: var(--text-primary, #ccc); }
+.btn-import:disabled { opacity: 0.4; cursor: not-allowed; }
 .add-hint { font-size: 10.5px; color: var(--text-muted, #555); text-align: center; }
 
 /* toggle */
@@ -841,20 +830,42 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 .toggle-switch.on .toggle-knob { left: 18px; background: #fff; }
 
-.btn-overwrite {
-  width: 100%; justify-content: center;
-  background: rgba(224,100,50,0.1) !important; border-color: rgba(224,100,50,0.3) !important; color: #e06432 !important;
-}
-.btn-overwrite:hover:not(:disabled) { background: rgba(224,100,50,0.2) !important; }
-.overwrite-hint { font-size: 10.5px; color: var(--text-muted, #555); margin-top: 6px; line-height: 1.5; }
 .folder-pick-error {
   margin-top: 8px; font-size: 11px; color: #e07050; white-space: pre-line;
   background: rgba(224,112,80,0.08); border: 1px solid rgba(224,112,80,0.25);
   border-radius: 6px; padding: 8px 10px; line-height: 1.6;
 }
 
-/* 操作区 */
-.section-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 裁剪对比（左侧内嵌） */
+.section-preview { flex: 1; min-height: 0; }
+.section-preview-empty { flex: 1; }
+.preview-empty-hint {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 20px 0; color: var(--text-muted, #444); text-align: center;
+}
+.preview-empty-hint span { font-size: 11px; }
+
+.compare-mini {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px;
+}
+.cmp-mini-side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.cmp-mini-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted, #555); }
+.cmp-mini-box {
+  width: 100%; aspect-ratio: 1; max-height: 100px; border-radius: 5px; overflow: hidden;
+  border: 1px solid var(--border, #1e1e1e); position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.cmp-mini-size { font-size: 9.5px; color: var(--text-muted, #555); }
+.cmp-mini-arrow { flex-shrink: 0; padding-top: 30px; color: var(--text-muted, #444); }
+
+.action-row-inline { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.error-msg-inline {
+  margin-top: 6px; font-size: 11px; color: #e05252;
+  background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.2);
+  border-radius: 5px; padding: 4px 8px;
+}
+
+/* 公共按钮 */
 .btn-primary {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
@@ -872,18 +883,46 @@ onBeforeUnmount(() => { tasks.value = [] })
 .btn-ghost:hover:not(:disabled) { border-color: var(--border-hover, #444); color: var(--text-dim, #888); }
 .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-danger:hover { border-color: #e05252 !important; color: #e05252 !important; }
+.btn-sm { padding: 5px 10px !important; font-size: 11px !important; }
+.btn-overwrite {
+  background: rgba(224,100,50,0.1) !important; border-color: rgba(224,100,50,0.3) !important; color: #e06432 !important;
+}
+.btn-overwrite:hover:not(:disabled) { background: rgba(224,100,50,0.2) !important; }
+.btn-dl {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; background: rgba(76,175,120,0.1);
+  border: 1px solid rgba(76,175,120,0.3); border-radius: 6px;
+  color: #4caf78; font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.btn-dl:hover { background: rgba(76,175,120,0.2); }
 
-/* 任务列表 */
-.task-list { flex: 1; overflow-y: auto; }
-.task-list::-webkit-scrollbar { width: 3px; }
-.task-list::-webkit-scrollbar-thumb { background: var(--scrollbar, #222); }
-.task-list-hd {
-  font-size: 10.5px; color: var(--text-muted, #555); padding: 8px 14px 4px;
+/* ── 右侧文件列表面板 ─────────────── */
+.file-panel {
+  width: 340px; flex-shrink: 0;
+  background: var(--panel-bg, #0a0a0a);
+  border-left: 1px solid var(--border, #1e1e1e);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+.file-panel-hd {
+  flex-shrink: 0; padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border, #1e1e1e);
   display: flex; align-items: center; gap: 6px;
 }
+.file-panel-title { font-size: 12px; font-weight: 600; color: var(--text-primary, #ccc); }
+.file-count { color: var(--text-muted, #555); font-weight: 400; }
 .task-stats { margin-left: auto; font-size: 10px; color: var(--text-muted, #555); }
 .stat-done { color: #4caf78; }
 .stat-err  { color: #e05252; }
+
+.file-panel-actions {
+  flex-shrink: 0; display: flex; gap: 5px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border, #1e1e1e);
+}
+
+.task-list { flex: 1; overflow-y: auto; }
+.task-list::-webkit-scrollbar { width: 3px; }
+.task-list::-webkit-scrollbar-thumb { background: var(--scrollbar, #222); }
 
 .task-item {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
@@ -896,7 +935,7 @@ onBeforeUnmount(() => { tasks.value = [] })
 .st-error.selected   { border-left-color: #e05252; }
 
 .task-thumb {
-  width: 48px; height: 48px; border-radius: 6px; flex-shrink: 0;
+  width: 52px; height: 52px; border-radius: 6px; flex-shrink: 0;
   border: 1px solid var(--border, #1e1e1e); overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
@@ -932,70 +971,22 @@ onBeforeUnmount(() => { tasks.value = [] })
 .tbtn-dl:hover { color: #4caf78; }
 .tbtn-rm:hover { color: #e05252; }
 
-.empty-hint {
+.file-panel-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px; color: var(--text-muted, #444);
   padding: 32px 20px; cursor: default; text-align: center;
 }
-.empty-hint p { font-size: 12px; line-height: 1.6; }
+.file-panel-empty p { font-size: 12px; line-height: 1.6; }
+.file-panel-empty .sub { font-size: 10.5px; color: var(--text-muted, #555) !important; }
 
-/* ── 右侧预览 ─────────────────────── */
-.preview-pane {
-  flex: 1; display: flex; flex-direction: column;
-  overflow: hidden; background: var(--canvas-bg, #080808); position: relative;
-}
-.preview-pane::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background-image: linear-gradient(var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line,rgba(255,255,255,0.015)) 1px,transparent 1px);
-  background-size: 40px 40px; z-index: 0;
-}
-
-.preview-empty {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 12px; color: var(--text-muted, #333); z-index: 1;
-}
-.preview-empty p { font-size: 13px; }
-.preview-empty .sub { font-size: 11.5px; color: var(--text-muted, #444) !important; margin-top: -4px; }
-
-.compare-wrap {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 20px; padding: 28px; z-index: 1; min-height: 0; overflow: hidden;
-}
-.compare-side { flex: 1; max-width: 46%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
-.compare-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #555); }
-.compare-img-box {
-  width: 100%; flex: 1; max-height: 440px; border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--border, #1e1e1e); position: relative;
-  display: flex; align-items: center; justify-content: center;
-}
+/* canvas */
 .cmp-canvas { max-width: 100%; max-height: 100%; display: block; image-rendering: pixelated; }
 .cmp-overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: rgba(8,8,8,0.65); font-size: 12px; color: var(--text-muted, #555);
+  background: rgba(8,8,8,0.65); font-size: 11px; color: var(--text-muted, #555);
 }
-.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
 .saving   { color: #4caf78; font-weight: 600; }
 .no-change { color: #aaaa55; font-weight: 600; }
-.cmp-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
-
-.action-row {
-  z-index: 1; flex-shrink: 0;
-  border-top: 1px solid var(--border, #1e1e1e);
-  background: var(--panel-bg, #0a0a0a);
-  padding: 12px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-}
-.btn-dl {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 14px; background: rgba(76,175,120,0.1);
-  border: 1px solid rgba(76,175,120,0.3); border-radius: 6px;
-  color: #4caf78; font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit;
-}
-.btn-dl:hover { background: rgba(76,175,120,0.2); }
-.error-msg {
-  font-size: 11.5px; color: #e05252;
-  background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.2);
-  border-radius: 5px; padding: 5px 10px;
-}
 
 /* ── 确认弹窗 ─────────────────────── */
 .dialog-mask {
