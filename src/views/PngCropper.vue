@@ -690,17 +690,32 @@ const origCanvas = ref(null)
 const cropCanvas = ref(null)
 const workCanvas = ref(null)
 
+function fitCanvas(c, pw, ph) {
+  // 让 canvas 按自身像素比例适配容器，避免 CSS 拉伸
+  if (!c || !pw || !ph) return
+  const scale = Math.min(pw / c.width, ph / c.height)
+  c.style.width  = Math.round(c.width  * scale) + 'px'
+  c.style.height = Math.round(c.height * scale) + 'px'
+}
 function drawOrigCanvas(task) {
   const c = origCanvas.value; if (!c || !task.origImageData) return
   c.width = task.origW; c.height = task.origH
   c.getContext('2d').putImageData(task.origImageData, 0, 0)
+  nextTick(() => {
+    const box = c.parentElement
+    if (box) fitCanvas(c, box.clientWidth - 2, box.clientHeight - 2)
+  })
 }
 function drawCropCanvas(task) {
   const c = cropCanvas.value; if (!c) return
   if (task.cropCanvas) {
     c.width = task.cropCanvas.width; c.height = task.cropCanvas.height
     c.getContext('2d').drawImage(task.cropCanvas, 0, 0)
-  } else { c.width = 1; c.height = 1; c.getContext('2d').clearRect(0,0,1,1) }
+    nextTick(() => {
+      const box = c.parentElement
+      if (box) fitCanvas(c, box.clientWidth - 2, box.clientHeight - 2)
+    })
+  } else { c.width = 1; c.height = 1; c.style.width = ''; c.style.height = '' }
 }
 
 watch(selectedTask, (t) => {
@@ -1023,12 +1038,11 @@ function showToast(msg, type = 'success') {
 
 /* canvas */
 .cmp-canvas {
-  max-width: 100%; max-height: 100%;
   display: block;
   image-rendering: pixelated;
-  object-fit: contain;
-  /* 让 canvas 按自身像素比例显示，不被容器拉伸 */
-  width: auto; height: auto;
+  /* JS 负责设置 style.width/height，这里只加上限 */
+  max-width: 100%;
+  max-height: 100%;
 }
 .cmp-overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
