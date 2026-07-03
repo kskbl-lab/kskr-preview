@@ -103,6 +103,7 @@
             {{ isProcessing ? '覆盖处理中…' : '选择文件夹并直接覆盖' }}
           </button>
           <div class="overwrite-hint">处理完成后原 PNG 将被裁剪版本覆盖，文件名保持不变</div>
+          <div v-if="folderPickError" class="folder-pick-error">{{ folderPickError }}</div>
         </div>
 
         <div v-if="tasks.length" class="section section-actions">
@@ -243,6 +244,7 @@ const alphaThreshold = ref(1)
 const padding        = ref(10)
 const activePreset   = ref('precise')
 const autoBackup     = ref(true)
+const folderPickError = ref('')
 
 const presets = [
   { id: 'precise',  name: '精准模式',  desc: 'α≥1 · padding=10 · 保留所有半透明边缘',  threshold: 1,  padding: 10 },
@@ -442,11 +444,17 @@ async function downloadZip() {
 // ── 覆盖模式：File System Access API ─────────
 async function pickFolderOverwrite() {
   if (!hasFSAPI) return
+  folderPickError.value = ''
 
   let dirHandle
   try {
     dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
-  } catch { return }  // 用户取消
+  } catch (err) {
+    if (err && err.name !== 'AbortError') {
+      folderPickError.value = '无法访问该文件夹。\n\n浏览器禁止写入系统保护目录（如 /Applications、/System 等）。\n\n解决方法：\n① 将文件夹移到桌面或"文稿"后再操作\n② 或切换到「安全模式」→ 选择文件夹 → 下载 ZIP → 手动解压覆盖'
+    }
+    return
+  }
 
   // 扫描所有 PNG
   const found = []
@@ -717,6 +725,11 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 .btn-overwrite:hover:not(:disabled) { background: rgba(224,100,50,0.2) !important; }
 .overwrite-hint { font-size: 10.5px; color: var(--text-muted, #555); margin-top: 6px; line-height: 1.5; }
+.folder-pick-error {
+  margin-top: 8px; font-size: 11px; color: #e07050; white-space: pre-line;
+  background: rgba(224,112,80,0.08); border: 1px solid rgba(224,112,80,0.25);
+  border-radius: 6px; padding: 8px 10px; line-height: 1.6;
+}
 
 /* 操作区 */
 .section-actions { display: flex; gap: 6px; flex-wrap: wrap; }
