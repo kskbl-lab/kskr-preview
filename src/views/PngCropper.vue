@@ -184,8 +184,10 @@
         <div class="compare-wrap">
           <div class="compare-side">
             <div class="compare-label">原图</div>
-            <div class="compare-img-box checker">
-              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
+            <div class="compare-img-outer">
+              <div class="canvas-wrap checker">
+                <img :src="selectedTask.previewUrl" class="cmp-img" />
+              </div>
             </div>
             <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
           </div>
@@ -194,10 +196,12 @@
           </div>
           <div class="compare-side">
             <div class="compare-label">裁剪后</div>
-            <div class="compare-img-box checker">
-              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
-              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
+            <div class="compare-img-outer">
+              <div v-if="!selectedTask.cropPreviewUrl" class="cmp-placeholder">
                 <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
+              </div>
+              <div v-else class="canvas-wrap checker">
+                <img :src="selectedTask.cropPreviewUrl" class="cmp-img" />
               </div>
             </div>
             <div class="compare-size" v-if="selectedTask.cropW">
@@ -372,12 +376,13 @@ function makeTask(file, relPath, fileHandle = null, dirHandle = null) {
     id: ++idCtr,
     file,
     relPath,
-    fileHandle,   // File System Access API handle
-    dirHandle,    // 根目录 handle（备份用）
-    status: 'idle',   // idle|processing|done|overwritten|skipped|transparent|error
+    fileHandle,
+    dirHandle,
+    status: 'idle',
     previewUrl: '',
     origImageData: null,
     cropCanvas: null,
+    cropPreviewUrl: null,  // Blob URL for cropped img preview
     origW: 0, origH: 0,
     cropW: 0, cropH: 0,
     savingPct: 0,
@@ -405,7 +410,7 @@ function loadPreview(task) {
 
 function selectTask(task) {
   selectedId.value = task.id
-  nextTick(() => { drawOrigCanvas(task); drawCropCanvas(task) })
+  nextTick(() => { drawOrigCanvas(task) })
 }
 
 function removeTask(task) {
@@ -447,6 +452,14 @@ function cropImageData(imageData, thr, pad) {
   return { canvas: out, w: cw, h: ch }
 }
 
+// 设置裁剪后预览 URL（用 Blob URL + img，保证比例准确）
+async function setCropPreview(task, canvas) {
+  if (task.cropPreviewUrl) URL.revokeObjectURL(task.cropPreviewUrl)
+  const blob = await canvasToBlob(canvas)
+  task.cropPreviewUrl = URL.createObjectURL(blob)
+  return blob
+}
+
 async function processSingle(task) {
   if (!task.origImageData) { task.errorMsg = '图片尚未加载，请稍候'; return }
   task.status = 'processing'; task.errorMsg = ''; await nextTick()
@@ -459,15 +472,14 @@ async function processSingle(task) {
     if (result.w === task.origW && result.h === task.origH) {
       task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; task.savingPct = 0
       task.cropCanvas = result.canvas
-      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+      await setCropPreview(task, result.canvas)
       showToast('无需裁剪', 'info'); return
     }
     task.cropCanvas = result.canvas
     task.cropW = result.w; task.cropH = result.h
     task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
-    task.downloadBlob = await canvasToBlob(result.canvas)
+    task.downloadBlob = await setCropPreview(task, result.canvas)
     task.status = 'done'
-    if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
     showToast(`裁剪成功 ${task.file.name}  ${task.origW}×${task.origH} → ${task.cropW}×${task.cropH}  节省 ${task.savingPct}%`)
   } catch (err) {
     task.status = 'error'; task.errorMsg = '裁剪失败：' + err.message
@@ -572,7 +584,7 @@ async function processAllOverwrite() {
       if (result.w === task.origW && result.h === task.origH) {
         task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h
         task.cropCanvas = result.canvas
-        if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+        await setCropPreview(task, result.canvas)
         skipN++; continue
       }
       const blob = await canvasToBlob(result.canvas)
@@ -592,8 +604,8 @@ async function processAllOverwrite() {
       task.cropW = result.w; task.cropH = result.h
       task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
       task.downloadBlob = blob
+      await setCropPreview(task, result.canvas)
       task.status = 'overwritten'
-      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
       overN++
     } catch (err) {
       task.status = 'error'; task.errorMsg = err.message
@@ -686,41 +698,14 @@ function showConfirm(message) {
 }
 
 // ── 画布绘制 ──────────────────────────────────
-const origCanvas = ref(null)
-const cropCanvas = ref(null)
 const workCanvas = ref(null)
 
-function fitCanvas(c, pw, ph) {
-  // 让 canvas 按自身像素比例适配容器，避免 CSS 拉伸
-  if (!c || !pw || !ph) return
-  const scale = Math.min(pw / c.width, ph / c.height)
-  c.style.width  = Math.round(c.width  * scale) + 'px'
-  c.style.height = Math.round(c.height * scale) + 'px'
-}
-function drawOrigCanvas(task) {
-  const c = origCanvas.value; if (!c || !task.origImageData) return
-  c.width = task.origW; c.height = task.origH
-  c.getContext('2d').putImageData(task.origImageData, 0, 0)
-  nextTick(() => {
-    const box = c.parentElement
-    if (box) fitCanvas(c, box.clientWidth - 2, box.clientHeight - 2)
-  })
-}
-function drawCropCanvas(task) {
-  const c = cropCanvas.value; if (!c) return
-  if (task.cropCanvas) {
-    c.width = task.cropCanvas.width; c.height = task.cropCanvas.height
-    c.getContext('2d').drawImage(task.cropCanvas, 0, 0)
-    nextTick(() => {
-      const box = c.parentElement
-      if (box) fitCanvas(c, box.clientWidth - 2, box.clientHeight - 2)
-    })
-  } else { c.width = 1; c.height = 1; c.style.width = ''; c.style.height = '' }
-}
+// origCanvas 仍用于 workCanvas 内部计算，不需要 DOM ref 了
+// 原图和裁剪后都通过 task.previewUrl / task.cropPreviewUrl 显示
 
 watch(selectedTask, (t) => {
-  if (!t) return
-  nextTick(() => { drawOrigCanvas(t); drawCropCanvas(t) })
+  // 切换文件时，若已有 origImageData 但还没预览过，触发实时预览
+  if (t && t.origImageData && !t.cropPreviewUrl) schedulePreview()
 })
 
 // ── 参数变化时实时重新裁剪当前选中文件 ────────────
@@ -729,16 +714,17 @@ function schedulePreview() {
   const t = selectedTask.value
   if (!t || !t.origImageData) return
   clearTimeout(previewTimer)
-  previewTimer = setTimeout(() => {
+  previewTimer = setTimeout(async () => {
     const result = cropImageData(t.origImageData, alphaThreshold.value, padding.value)
     if (!result) {
+      if (t.cropPreviewUrl) { URL.revokeObjectURL(t.cropPreviewUrl); t.cropPreviewUrl = null }
       t.cropCanvas = null; t.cropW = 0; t.cropH = 0; t.savingPct = 0
     } else {
       t.cropCanvas = result.canvas
       t.cropW = result.w; t.cropH = result.h
       t.savingPct = Math.round((1 - (result.w * result.h) / (t.origW * t.origH)) * 100)
+      await setCropPreview(t, result.canvas)
     }
-    nextTick(() => drawCropCanvas(t))
   }, 120)
 }
 watch(alphaThreshold, schedulePreview)
@@ -902,11 +888,35 @@ function showToast(msg, type = 'success') {
 }
 .compare-side { flex: 1; max-width: 46%; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
 .compare-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted, #555); }
-.compare-img-box {
-  width: 100%; flex: 1; max-height: 440px; border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--border, #1e1e1e); position: relative;
+
+/* 外层容器：不显示棋盘格，只负责居中和尺寸限制 */
+.compare-img-outer {
+  width: 100%; flex: 1; max-height: 440px;
+  border-radius: 6px; border: 1px solid var(--border, #1e1e1e);
   display: flex; align-items: center; justify-content: center;
-}.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
+  overflow: hidden; position: relative;
+}
+/* tight wrapper：紧包图片，只有这里才显示棋盘格 */
+.canvas-wrap {
+  display: inline-block;
+  width: fit-content; height: fit-content;
+  line-height: 0;
+  border-radius: 3px;
+  outline: 2px solid red; /* 调试用，确认边界 */
+  max-width: 100%; max-height: 100%;
+  overflow: hidden;
+}
+.cmp-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.cmp-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; min-height: 80px;
+  font-size: 11px; color: var(--text-muted, #555);
+}
 .cmp-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
 .action-row {
   z-index: 1; flex-shrink: 0;
@@ -1037,19 +1047,9 @@ function showToast(msg, type = 'success') {
 .file-panel-empty .sub { font-size: 10.5px; color: var(--text-muted, #555) !important; }
 
 /* canvas */
-.cmp-canvas {
-  display: block;
-  image-rendering: pixelated;
-  /* JS 负责设置 style.width/height，这里只加上限 */
-  max-width: 100%;
-  max-height: 100%;
-}
-.cmp-overlay {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: rgba(8,8,8,0.65); font-size: 11px; color: var(--text-muted, #555);
-}
 .saving   { color: #4caf78; font-weight: 600; }
 .no-change { color: #aaaa55; font-weight: 600; }
+.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
 
 /* ── 确认弹窗 ─────────────────────── */
 .dialog-mask {
