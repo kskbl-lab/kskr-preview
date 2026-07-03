@@ -104,8 +104,8 @@
 
     </div>
 
-    <!-- ── 中间预览区 ───────────────────────── -->
-    <div class="preview-pane" @dragover.prevent @drop.prevent="onDropGlobal">
+    <!-- ── 右侧文件列表 ───────────────────────── -->
+    <div class="file-panel" @dragover.prevent @drop.prevent="onDropGlobal">
       <div v-if="!selectedTask" class="preview-empty">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <p>点击左侧文件查看裁剪对比</p>
@@ -707,8 +707,15 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 
 /* ── 左侧设置面板 ─────────────────── */
+/* ── 左侧区域：设置 + 文件列表并排 ──────── */
+.left-area {
+  display: flex; flex-shrink: 0;
+  border-right: 1px solid var(--border, #1e1e1e);
+  overflow: hidden;
+}
+
 .ctrl-panel {
-  width: 400px; flex-shrink: 0;
+  width: 300px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
   border-right: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow-y: auto;
@@ -892,7 +899,6 @@ onBeforeUnmount(() => { tasks.value = [] })
 .file-panel {
   width: 340px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
-  border-left: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .file-panel::-webkit-scrollbar { width: 3px; }
