@@ -97,13 +97,27 @@
             </div>
           </label>
         </div>
-        <div class="section section-actions">
-          <button class="btn-primary btn-overwrite" @click="pickFolderOverwrite" :disabled="isProcessing">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            {{ isProcessing ? '覆盖处理中…' : '选择文件夹并直接覆盖' }}
-          </button>
-          <div class="overwrite-hint">处理完成后原 PNG 将被裁剪版本覆盖，文件名保持不变</div>
+        <div class="section">
+          <div class="section-title">导入方式</div>
+          <div class="import-btns">
+            <button class="btn-import" @click="pickFilesOverwrite" :disabled="isProcessing">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+              批量选择 PNG
+            </button>
+            <button class="btn-import" @click="pickFolderOverwrite" :disabled="isProcessing">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              选择文件夹
+            </button>
+          </div>
+          <div class="add-hint">批量选 PNG 或整个文件夹；处理后直接写回原文件</div>
           <div v-if="folderPickError" class="folder-pick-error">{{ folderPickError }}</div>
+        </div>
+
+        <div v-if="tasks.length" class="section section-actions">
+          <button class="btn-primary btn-overwrite" @click="processAllOverwrite" :disabled="isProcessing">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            {{ isProcessing ? '覆盖处理中…' : '全部裁剪并覆盖' }}
+          </button>
         </div>
 
         <div v-if="tasks.length" class="section section-actions">
@@ -442,6 +456,88 @@ async function downloadZip() {
 }
 
 // ── 覆盖模式：File System Access API ─────────
+// 覆盖模式：批量选择 PNG 文件（用 showOpenFilePicker readwrite）
+async function pickFilesOverwrite() {
+  if (!hasFSAPI) return
+  folderPickError.value = ''
+  let fileHandles
+  try {
+    fileHandles = await window.showOpenFilePicker({
+      multiple: true,
+      types: [{ description: 'PNG Images', accept: { 'image/png': ['.png'] } }],
+    })
+  } catch (err) {
+    if (err && err.name !== 'AbortError') {
+      folderPickError.value = '无法访问所选文件。浏览器禁止写入系统保护目录（如 /Applications 等）。\n请将文件移到桌面或"文稿"后再试。'
+    }
+    return
+  }
+  if (!fileHandles.length) return
+
+  const ok = await showConfirm(
+    `已选择 ${fileHandles.length} 个 PNG 文件。\n\n` +
+    (autoBackup.value ? '备份将保存在各文件同目录下的 _backup_original_pngs 文件夹中，' : '未开启自动备份，') +
+    '处理后原文件将被裁剪版本直接覆盖，文件名保持不变。\n\n是否继续？'
+  )
+  if (!ok) return
+
+  for (const fh of fileHandles) {
+    const file = await fh.getFile()
+    if (file.type !== 'image/png' && !/\.png$/i.test(file.name)) continue
+    const task = makeTask(file, file.name, fh, null)
+    tasks.value.push(task)
+    loadPreview(task)
+    if (!selectedId.value) selectedId.value = task.id
+  }
+}
+
+// 覆盖模式：对已加载的任务（文件或文件夹来源）执行覆盖
+async function processAllOverwrite() {
+  const pending = tasks.value.filter(t => t.status === 'idle' || t.status === 'error')
+  if (!pending.length) return
+
+  const ok = await showConfirm(
+    `将对 ${pending.length} 个 PNG 文件执行裁剪并直接覆盖原文件。\n\n是否继续？`
+  )
+  if (!ok) return
+
+  for (const task of pending) {
+    task.status = 'processing'; await nextTick()
+    try {
+      if (!task.origImageData) await waitForImageData(task, 5000)
+      const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
+      if (!result) { task.status = 'transparent'; task.errorMsg = '全透明，已跳过'; continue }
+      if (result.w === task.origW && result.h === task.origH) {
+        task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h
+        task.cropCanvas = result.canvas
+        if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+        continue
+      }
+      const blob = await canvasToBlob(result.canvas)
+
+      // 备份（仅文件夹来源有 dirHandle，文件选择模式暂不备份到子目录）
+      if (autoBackup.value && task.dirHandle) {
+        try { await backupFile(task, task.dirHandle) } catch {}
+      }
+
+      // 写回原文件
+      if (!task.fileHandle) { task.status = 'error'; task.errorMsg = '无文件句柄，无法写入'; continue }
+      const writable = await task.fileHandle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+
+      task.cropCanvas = result.canvas
+      task.cropW = result.w; task.cropH = result.h
+      task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
+      task.downloadBlob = blob
+      task.status = 'overwritten'
+      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+    } catch (err) {
+      task.status = 'error'; task.errorMsg = err.message
+    }
+  }
+}
+
 async function pickFolderOverwrite() {
   if (!hasFSAPI) return
   folderPickError.value = ''
@@ -461,57 +557,16 @@ async function pickFolderOverwrite() {
   await scanDir(dirHandle, dirHandle, '', found)
   if (!found.length) { alert('该文件夹中没有找到 PNG 文件。'); return }
 
-  // 确认弹窗
-  const ok = await showConfirm(
-    `将处理文件夹"${dirHandle.name}"中的 ${found.length} 个 PNG 文件。\n\n` +
-    (autoBackup.value ? '备份将保存到 _backup_original_pngs 子文件夹中，' : '未开启自动备份，') +
-    '处理后原文件将被裁剪版本覆盖，文件名保持不变。\n\n建议先手动备份文件夹。是否继续？'
-  )
-  if (!ok) return
-
-  // 加载任务
-  clearAll()
+  // 加载任务（追加到现有列表）
   for (const { file, relPath, fileHandle: fh, rootHandle: rh } of found) {
     const task = makeTask(file, relPath, fh, rh)
     tasks.value.push(task)
     loadPreview(task)
   }
-  if (tasks.value.length) selectedId.value = tasks.value[0].id
+  if (!selectedId.value && tasks.value.length) selectedId.value = tasks.value[0].id
 
-  // 逐个处理
-  for (const task of tasks.value) {
-    task.status = 'processing'; await nextTick()
-    try {
-      if (!task.origImageData) {
-        // 等待 loadPreview 完成
-        await waitForImageData(task, 5000)
-      }
-      const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
-      if (!result) { task.status = 'transparent'; task.errorMsg = '全透明，已跳过'; continue }
-      if (result.w === task.origW && result.h === task.origH) { task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; continue }
-
-      const blob = await canvasToBlob(result.canvas)
-
-      // 备份原图
-      if (autoBackup.value) {
-        try { await backupFile(task, dirHandle) } catch {}
-      }
-
-      // 写回原文件
-      const writable = await task.fileHandle.createWritable()
-      await writable.write(blob)
-      await writable.close()
-
-      task.cropCanvas = result.canvas
-      task.cropW = result.w; task.cropH = result.h
-      task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
-      task.downloadBlob = blob
-      task.status = 'overwritten'
-      if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
-    } catch (err) {
-      task.status = 'error'; task.errorMsg = err.message
-    }
-  }
+  // 调用统一覆盖处理（含确认弹窗）
+  await processAllOverwrite()
 }
 
 async function scanDir(rootHandle, dirHandle, prefix, results) {
