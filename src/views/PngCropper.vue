@@ -1,7 +1,7 @@
 <template>
   <div class="cropper-page">
 
-    <!-- ── 左侧：设置面板 ──────────────────── -->
+    <!-- ── 左：设置面板 ──────────────────────────── -->
     <div class="ctrl-panel">
       <div class="panel-header">
         <span class="panel-title">PNG 透明边缘裁剪器</span>
@@ -101,55 +101,9 @@
           <div v-if="folderPickError" class="folder-pick-error">{{ folderPickError }}</div>
         </div>
       </template>
-
     </div>
 
-    <!-- ── 右侧文件列表 ───────────────────────── -->
-    <div class="file-panel" @dragover.prevent @drop.prevent="onDropGlobal">
-      <div v-if="!selectedTask" class="preview-empty">
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p>点击左侧文件查看裁剪对比</p>
-        <p class="sub">或拖拽 PNG 文件 / 文件夹到此处</p>
-      </div>
-      <template v-if="selectedTask">
-        <div class="compare-wrap">
-          <div class="compare-side">
-            <div class="compare-label">原图</div>
-            <div class="compare-img-box checker">
-              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
-            </div>
-            <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
-          </div>
-          <div class="cmp-arrow">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </div>
-          <div class="compare-side">
-            <div class="compare-label">裁剪后</div>
-            <div class="compare-img-box checker">
-              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
-              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
-                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
-              </div>
-            </div>
-            <div class="compare-size" v-if="selectedTask.cropW">
-              {{ selectedTask.cropW }} × {{ selectedTask.cropH }}
-              <span v-if="selectedTask.savingPct > 0" class="saving">节省 {{ selectedTask.savingPct }}%</span>
-              <span v-if="selectedTask.savingPct === 0" class="no-change">无需裁剪</span>
-            </div>
-          </div>
-        </div>
-        <div class="action-row">
-          <button class="btn-primary" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
-          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl" @click="downloadSingle(selectedTask)">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            下载 {{ selectedTask.file.name }}
-          </button>
-          <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
-        </div>
-      </template>
-    </div>
-
-    <!-- ── 右侧文件列表 ───────────────────────── -->
+    <!-- ── 中：文件列表面板 ──────────────────────── -->
     <div class="file-panel" @dragover.prevent @drop.prevent="onDropGlobal">
       <div class="file-panel-hd">
         <span class="file-panel-title">文件列表<span class="file-count" v-if="tasks.length"> ({{ tasks.length }})</span></span>
@@ -217,6 +171,51 @@
         <p v-else>拖拽 PNG 文件到此处<br>或点击左侧按钮添加</p>
         <p class="sub" v-if="pageMode === 'overwrite'">覆盖模式需要浏览器弹窗授权写入权限</p>
       </div>
+    </div>
+
+    <!-- ── 右：裁剪对比预览（flex:1 撑满）────────── -->
+    <div class="preview-pane" @dragover.prevent @drop.prevent="onDropGlobal">
+      <div v-if="!selectedTask" class="preview-empty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <p>从中间列表选择文件查看裁剪对比</p>
+        <p class="sub">或拖拽 PNG 文件 / 文件夹到中间列表</p>
+      </div>
+      <template v-if="selectedTask">
+        <div class="compare-wrap">
+          <div class="compare-side">
+            <div class="compare-label">原图</div>
+            <div class="compare-img-box checker">
+              <canvas ref="origCanvas" class="cmp-canvas"></canvas>
+            </div>
+            <div class="compare-size" v-if="selectedTask.origW">{{ selectedTask.origW }} × {{ selectedTask.origH }}</div>
+          </div>
+          <div class="cmp-arrow">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </div>
+          <div class="compare-side">
+            <div class="compare-label">裁剪后</div>
+            <div class="compare-img-box checker">
+              <canvas ref="cropCanvas" class="cmp-canvas"></canvas>
+              <div v-if="!selectedTask.cropCanvas" class="cmp-overlay">
+                <span>{{ selectedTask.status === 'processing' ? '处理中…' : '尚未处理' }}</span>
+              </div>
+            </div>
+            <div class="compare-size" v-if="selectedTask.cropW">
+              {{ selectedTask.cropW }} × {{ selectedTask.cropH }}
+              <span v-if="selectedTask.savingPct > 0" class="saving">节省 {{ selectedTask.savingPct }}%</span>
+              <span v-if="selectedTask.savingPct === 0" class="no-change">无需裁剪</span>
+            </div>
+          </div>
+        </div>
+        <div class="action-row">
+          <button class="btn-primary" :disabled="selectedTask.status === 'processing'" @click="processSingle(selectedTask)">裁剪此文件</button>
+          <button v-if="pageMode === 'safe' && selectedTask.status === 'done'" class="btn-dl" @click="downloadSingle(selectedTask)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下载 {{ selectedTask.file.name }}
+          </button>
+          <div v-if="selectedTask.errorMsg" class="error-msg">{{ selectedTask.errorMsg }}</div>
+        </div>
+      </template>
     </div>
 
     <!-- 确认弹窗 -->
@@ -707,13 +706,6 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 
 /* ── 左侧设置面板 ─────────────────── */
-/* ── 左侧区域：设置 + 文件列表并排 ──────── */
-.left-area {
-  display: flex; flex-shrink: 0;
-  border-right: 1px solid var(--border, #1e1e1e);
-  overflow: hidden;
-}
-
 .ctrl-panel {
   width: 300px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
@@ -895,10 +887,12 @@ onBeforeUnmount(() => { tasks.value = [] })
 }
 .btn-dl:hover { background: rgba(76,175,120,0.2); }
 
-/* 文件列表（右侧独立面板） */
+/* 文件列表（中间独立面板） */
 .file-panel {
   width: 340px; flex-shrink: 0;
   background: var(--panel-bg, #0a0a0a);
+  border-left: 1px solid var(--border, #1e1e1e);
+  border-right: 1px solid var(--border, #1e1e1e);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .file-panel::-webkit-scrollbar { width: 3px; }
