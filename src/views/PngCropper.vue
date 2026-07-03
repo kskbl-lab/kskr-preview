@@ -688,6 +688,27 @@ watch(selectedTask, (t) => {
   nextTick(() => { drawOrigCanvas(t); drawCropCanvas(t) })
 })
 
+// ── 参数变化时实时重新裁剪当前选中文件 ────────────
+let previewTimer = null
+function schedulePreview() {
+  const t = selectedTask.value
+  if (!t || !t.origImageData) return
+  clearTimeout(previewTimer)
+  previewTimer = setTimeout(() => {
+    const result = cropImageData(t.origImageData, alphaThreshold.value, padding.value)
+    if (!result) {
+      t.cropCanvas = null; t.cropW = 0; t.cropH = 0; t.savingPct = 0
+    } else {
+      t.cropCanvas = result.canvas
+      t.cropW = result.w; t.cropH = result.h
+      t.savingPct = Math.round((1 - (result.w * result.h) / (t.origW * t.origH)) * 100)
+    }
+    nextTick(() => drawCropCanvas(t))
+  }, 120)
+}
+watch(alphaThreshold, schedulePreview)
+watch(padding, schedulePreview)
+
 // ── 工具 ─────────────────────────────────────
 function canvasToBlob(canvas) {
   return new Promise(r => canvas.toBlob(r, 'image/png'))
