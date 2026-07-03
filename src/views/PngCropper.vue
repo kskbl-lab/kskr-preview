@@ -231,6 +231,13 @@
     </div>
 
     <canvas ref="workCanvas" style="display:none"></canvas>
+
+    <!-- Toast 提示 -->
+    <div class="toast-container">
+      <transition-group name="toast">
+        <div v-for="t in toasts" :key="t.id" class="toast" :class="'toast-' + t.type">{{ t.msg }}</div>
+      </transition-group>
+    </div>
   </div>
 </template>
 
@@ -446,13 +453,14 @@ async function processSingle(task) {
   try {
     const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
     if (!result) {
-      task.status = 'transparent'; task.errorMsg = '图片全透明，已跳过'; return
+      task.status = 'transparent'; task.errorMsg = '图片全透明，已跳过'
+      showToast('图片全透明，已跳过', 'warn'); return
     }
     if (result.w === task.origW && result.h === task.origH) {
       task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; task.savingPct = 0
       task.cropCanvas = result.canvas
       if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
-      return
+      showToast('无需裁剪', 'info'); return
     }
     task.cropCanvas = result.canvas
     task.cropW = result.w; task.cropH = result.h
@@ -460,15 +468,24 @@ async function processSingle(task) {
     task.downloadBlob = await canvasToBlob(result.canvas)
     task.status = 'done'
     if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+    showToast(`裁剪成功 ${task.file.name}  ${task.origW}×${task.origH} → ${task.cropW}×${task.cropH}  节省 ${task.savingPct}%`)
   } catch (err) {
     task.status = 'error'; task.errorMsg = '裁剪失败：' + err.message
+    showToast('裁剪失败：' + err.message, 'error')
   }
 }
 
 async function processAllSafe() {
+  let doneN = 0, skipN = 0
   for (const t of tasks.value) {
-    if (t.status === 'idle' || t.status === 'error') await processSingle(t)
+    if (t.status === 'idle' || t.status === 'error') {
+      const before = t.status
+      await processSingle(t)
+      if (t.status === 'done') doneN++
+      else if (t.status === 'skipped' || t.status === 'transparent') skipN++
+    }
   }
+  if (doneN > 0) showToast(`全部裁剪完成：${doneN} 张成功${skipN ? '，' + skipN + ' 张无需裁剪' : ''}`)
 }
 
 // ── 安全模式：下载 ───────────────────────────
@@ -545,6 +562,7 @@ async function processAllOverwrite() {
   )
   if (!ok) return
 
+  let overN = 0, skipN = 0
   for (const task of pending) {
     task.status = 'processing'; await nextTick()
     try {
@@ -555,7 +573,7 @@ async function processAllOverwrite() {
         task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h
         task.cropCanvas = result.canvas
         if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
-        continue
+        skipN++; continue
       }
       const blob = await canvasToBlob(result.canvas)
 
@@ -576,10 +594,12 @@ async function processAllOverwrite() {
       task.downloadBlob = blob
       task.status = 'overwritten'
       if (selectedId.value === task.id) nextTick(() => drawCropCanvas(task))
+      overN++
     } catch (err) {
       task.status = 'error'; task.errorMsg = err.message
     }
   }
+  if (overN > 0) showToast(`覆盖完成：${overN} 张已写回原文件${skipN ? '，' + skipN + ' 张无需裁剪' : ''}`)
 }
 
 async function pickFolderOverwrite() {
@@ -718,6 +738,15 @@ function statusLabel(s) {
 }
 
 onBeforeUnmount(() => { tasks.value = [] })
+
+// ── Toast ────────────────────────────────────
+const toasts = ref([])
+let toastId = 0
+function showToast(msg, type = 'success') {
+  const id = ++toastId
+  toasts.value.push({ id, msg, type })
+  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 2800)
+}
 </script>
 
 <style scoped>
@@ -862,8 +891,7 @@ onBeforeUnmount(() => { tasks.value = [] })
   width: 100%; flex: 1; max-height: 440px; border-radius: 6px; overflow: hidden;
   border: 1px solid var(--border, #1e1e1e); position: relative;
   display: flex; align-items: center; justify-content: center;
-}
-.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
+}.compare-size { font-size: 11px; color: var(--text-muted, #555); display: flex; gap: 6px; align-items: center; }
 .cmp-arrow { color: var(--text-muted, #444); flex-shrink: 0; }
 .action-row {
   z-index: 1; flex-shrink: 0;
@@ -994,7 +1022,14 @@ onBeforeUnmount(() => { tasks.value = [] })
 .file-panel-empty .sub { font-size: 10.5px; color: var(--text-muted, #555) !important; }
 
 /* canvas */
-.cmp-canvas { max-width: 100%; max-height: 100%; display: block; image-rendering: pixelated; }
+.cmp-canvas {
+  max-width: 100%; max-height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+  /* 让 canvas 按自身像素比例显示，不被容器拉伸 */
+  width: auto; height: auto;
+}
 .cmp-overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(8,8,8,0.65); font-size: 11px; color: var(--text-muted, #555);
@@ -1020,4 +1055,24 @@ onBeforeUnmount(() => { tasks.value = [] })
   color: #e05252; cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
 .btn-danger-solid:hover { background: rgba(224,82,82,0.3); }
+/* ── Toast ─────────────────────────────────── */
+.toast-container {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  z-index: 9999; pointer-events: none;
+}
+.toast {
+  padding: 9px 18px; border-radius: 8px; font-size: 12.5px; font-weight: 500;
+  background: rgba(30,30,30,0.96); border: 1px solid rgba(255,255,255,0.08);
+  color: #ddd; backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  max-width: 440px; text-align: center; white-space: pre-wrap;
+}
+.toast-success { border-color: rgba(76,175,120,0.4); color: #6fe0a8; }
+.toast-warn    { border-color: rgba(200,180,60,0.4);  color: #d4c050; }
+.toast-info    { border-color: rgba(91,142,230,0.4);  color: #7da8f0; }
+.toast-error   { border-color: rgba(224,82,82,0.4);   color: #f07070; }
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from { opacity: 0; transform: translateY(12px); }
+.toast-leave-to   { opacity: 0; transform: translateY(-8px); }
 </style>
