@@ -319,44 +319,48 @@ async function onDropOverwrite(e) {
 
   if (!plainFiles.length) return
 
-  // 尝试用 File System Access API 获取可写句柄（拖拽来的文件不需要额外申请权限，直接 createWritable 即可）
+  folderPickError.value = ''
+
+  // 尝试用 File System Access API 获取可写句柄
   const supportsHandle = typeof pngItems[0].getAsFileSystemHandle === 'function'
 
-  if (!supportsHandle) {
-    folderPickError.value = '拖入的文件无法在覆盖模式下直接写回。\n请改用【批量选择 PNG】按钮选文件，或切换到安全模式使用拖入。'
-    return
+  if (supportsHandle) {
+    // 并行获取所有 FileSystemFileHandle
+    const handleResults = await Promise.allSettled(
+      pngItems.map(item => item.getAsFileSystemHandle())
+    )
+
+    const writable = []
+    for (let i = 0; i < handleResults.length; i++) {
+      const result = handleResults[i]
+      if (result.status !== 'fulfilled') continue
+      const fh = result.value
+      if (!fh || fh.kind !== 'file') continue
+      const file = plainFiles[i]
+      if (!file || !/\.png$/i.test(file.name)) continue
+      writable.push({ fh, file })
+    }
+
+    if (writable.length) {
+      for (const { fh, file } of writable) {
+        const task = makeTask(file, file.name, fh, null)
+        tasks.value.push(task)
+        loadPreview(task)
+        if (!selectedId.value) selectedId.value = task.id
+      }
+      await processAllOverwrite()
+      return
+    }
   }
 
-  // 并行获取所有 FileSystemFileHandle
-  const handleResults = await Promise.allSettled(
-    pngItems.map(item => item.getAsFileSystemHandle())
-  )
-
-  const writable = []
-  for (let i = 0; i < handleResults.length; i++) {
-    const result = handleResults[i]
-    if (result.status !== 'fulfilled') continue
-    const fh = result.value
-    if (!fh || fh.kind !== 'file') continue
-    const file = plainFiles[i]
-    if (!file || !/\.png$/i.test(file.name)) continue
-    writable.push({ fh, file })
-  }
-
-  if (!writable.length) {
-    folderPickError.value = '拖入的文件无法在覆盖模式下直接写回。\n请改用【批量选择 PNG】按钮选文件，或切换到安全模式使用拖入。'
-    return
-  }
-
-  folderPickError.value = ''
-  for (const { fh, file } of writable) {
-    const task = makeTask(file, file.name, fh, null)
+  // 降级：拖入的文件拿不到可写句柄，加入列表但无法写回，提示用户
+  for (const file of plainFiles) {
+    const task = makeTask(file, file.name, null, null)
     tasks.value.push(task)
     loadPreview(task)
     if (!selectedId.value) selectedId.value = task.id
   }
-
-  await processAllOverwrite()
+  folderPickError.value = '拖入的文件无法自动获取写入权限，已加入预览列表。\n如需覆盖原文件，请使用左侧【批量选择 PNG】按钮导入。'
 }
 
 function addFiles(files, fromFolder) {
@@ -460,44 +464,57 @@ async function setCropPreview(task, canvas) {
   return blob
 }
 
-async function processSingle(task) {
-  if (!task.origImageData) { task.errorMsg = '图片尚未加载，请稍候'; return }
+async function processSingle(task, silent = false) {
+  if (!task.origImageData) {
+    // 等待图片加载完成（最多 5 秒）
+    try { await waitForImageData(task, 5000) } catch {
+      task.errorMsg = '图片尚未加载，请稍候再试'
+      if (!silent) showToast('图片尚未加载，请稍候再试', 'warn')
+      return
+    }
+  }
   task.status = 'processing'; task.errorMsg = ''; await nextTick()
   try {
     const result = cropImageData(task.origImageData, alphaThreshold.value, padding.value)
     if (!result) {
       task.status = 'transparent'; task.errorMsg = '图片全透明，已跳过'
-      showToast('图片全透明，已跳过', 'warn'); return
+      if (!silent) showToast('图片全透明，已跳过', 'warn')
+      return
     }
     if (result.w === task.origW && result.h === task.origH) {
       task.status = 'skipped'; task.cropW = result.w; task.cropH = result.h; task.savingPct = 0
       task.cropCanvas = result.canvas
       await setCropPreview(task, result.canvas)
-      showToast('无需裁剪', 'info'); return
+      if (!silent) showToast('无需裁剪', 'info')
+      return
     }
     task.cropCanvas = result.canvas
     task.cropW = result.w; task.cropH = result.h
     task.savingPct = Math.round((1 - (result.w * result.h) / (task.origW * task.origH)) * 100)
     task.downloadBlob = await setCropPreview(task, result.canvas)
     task.status = 'done'
-    showToast(`裁剪成功 ${task.file.name}  ${task.origW}×${task.origH} → ${task.cropW}×${task.cropH}  节省 ${task.savingPct}%`)
+    if (!silent) showToast(`裁剪成功 ${task.file.name}  ${task.origW}×${task.origH} → ${task.cropW}×${task.cropH}  节省 ${task.savingPct}%`)
   } catch (err) {
     task.status = 'error'; task.errorMsg = '裁剪失败：' + err.message
-    showToast('裁剪失败：' + err.message, 'error')
+    if (!silent) showToast('裁剪失败：' + err.message, 'error')
   }
 }
 
 async function processAllSafe() {
-  let doneN = 0, skipN = 0
-  for (const t of tasks.value) {
-    if (t.status === 'idle' || t.status === 'error') {
-      const before = t.status
-      await processSingle(t)
-      if (t.status === 'done') doneN++
-      else if (t.status === 'skipped' || t.status === 'transparent') skipN++
-    }
+  let doneN = 0, skipN = 0, errN = 0
+  const pending = tasks.value.filter(t => t.status === 'idle' || t.status === 'error')
+  if (!pending.length) return
+  for (const t of pending) {
+    await processSingle(t, true) // silent=true，批量时不逐张弹 toast
+    if (t.status === 'done') doneN++
+    else if (t.status === 'skipped' || t.status === 'transparent') skipN++
+    else if (t.status === 'error') errN++
   }
-  if (doneN > 0) showToast(`全部裁剪完成：${doneN} 张成功${skipN ? '，' + skipN + ' 张无需裁剪' : ''}`)
+  // 最后汇总一条提示
+  let msg = `全部裁剪完成：${doneN} 张成功`
+  if (skipN) msg += `，${skipN} 张无需裁剪`
+  if (errN)  msg += `，${errN} 张失败`
+  showToast(msg, errN ? 'warn' : 'success')
 }
 
 // ── 安全模式：下载 ───────────────────────────
