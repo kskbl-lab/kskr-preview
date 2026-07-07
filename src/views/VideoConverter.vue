@@ -362,9 +362,9 @@ function loadVideoEl(src) {
   return new Promise((resolve) => {
     const v = document.createElement('video')
     v.muted    = true
-    v.preload  = 'metadata'
+    v.preload  = 'auto'
     v.src      = src
-    v.onloadeddata = () => resolve(v)
+    v.oncanplay = () => resolve(v)
     v.onerror  = () => resolve(null)
     v.load()
   })
@@ -669,9 +669,20 @@ function lzwEncode(indices, minCodeSize) {
 // ─── 工具函数 ─────────────────────────────────
 function seekTo(video, time) {
   return new Promise((resolve, reject) => {
-    if (Math.abs(video.currentTime - time) < 0.001) { resolve(); return }
+    // 不短路第一帧：即使 currentTime 已经是目标值，也必须触发 seek 让浏览器解码该帧
+    // 否则刚加载的视频第一帧未解码，drawImage 会画出黑屏
     const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve() }
     const onErr    = () => { video.removeEventListener('error', onErr); reject(new Error('seek error')) }
+    if (Math.abs(video.currentTime - time) < 0.001) {
+      // 当前帧已就位，检查是否真的可绘制（readyState >= 2 表示有当前帧数据）
+      if (video.readyState >= 2) { resolve(); return }
+      // 否则强制 seek 触发解码
+      video.addEventListener('seeked', onSeeked, { once: true })
+      video.addEventListener('error',  onErr,    { once: true })
+      video.currentTime = time + 0.0001
+      video.currentTime = time
+      return
+    }
     video.addEventListener('seeked', onSeeked, { once: true })
     video.addEventListener('error',  onErr,    { once: true })
     video.currentTime = time
