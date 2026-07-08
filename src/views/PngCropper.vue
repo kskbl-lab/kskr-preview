@@ -4,7 +4,7 @@
     <!-- ── 左：设置面板 ──────────────────────────── -->
     <div class="ctrl-panel">
       <div class="panel-header">
-        <span class="panel-title">PNG 透明边缘裁剪器</span>
+        <span class="panel-title">PNG / WebP 透明边缘裁剪器</span>
       </div>
 
       <!-- 模式切换 -->
@@ -56,18 +56,18 @@
         <div class="section">
           <div class="section-title">导入文件</div>
           <div class="import-btns">
-            <input ref="filePicker"   type="file" accept="image/png" multiple style="display:none" @change="onFilePick" />
-            <input ref="folderPicker" type="file" accept="image/png" multiple webkitdirectory style="display:none" @change="onFolderPick" />
+            <input ref="filePicker"   type="file" accept="image/png,image/webp" multiple style="display:none" @change="onFilePick" />
+            <input ref="folderPicker" type="file" accept="image/png,image/webp" multiple webkitdirectory style="display:none" @change="onFolderPick" />
             <button class="btn-import" @click="filePicker.click()">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-              选择 PNG 文件
+              选择 PNG / WebP
             </button>
             <button class="btn-import" @click="folderPicker.click()">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               选择文件夹
             </button>
           </div>
-          <div class="add-hint">支持多选 PNG；文件夹导入保留相对路径</div>
+          <div class="add-hint">支持多选 PNG / WebP；文件夹导入保留相对路径</div>
         </div>
       </template>
 
@@ -90,14 +90,14 @@
           <div class="import-btns">
             <button class="btn-import" @click="pickFilesOverwrite" :disabled="isProcessing">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-              批量选择 PNG
+              批量选择 PNG / WebP
             </button>
             <button class="btn-import" @click="pickFolderOverwrite" :disabled="isProcessing">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               选择文件夹
             </button>
           </div>
-          <div class="add-hint">批量选 PNG 或整个文件夹；处理后直接写回原文件</div>
+          <div class="add-hint">批量选 PNG / WebP 或整个文件夹；处理后直接写回原文件</div>
           <div v-if="folderPickError" class="folder-pick-error">{{ folderPickError }}</div>
         </div>
       </template>
@@ -167,8 +167,8 @@
       </div>
       <div v-else class="file-panel-empty">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <p v-if="pageMode === 'safe'">拖拽 PNG 文件 / 文件夹<br>或点击左侧按钮添加</p>
-        <p v-else>拖拽 PNG 文件到此处<br>或点击左侧按钮添加</p>
+        <p v-if="pageMode === 'safe'">拖拽 PNG / WebP 文件 / 文件夹<br>或点击左侧按钮添加</p>
+        <p v-else>拖拽 PNG / WebP 文件到此处<br>或点击左侧按钮添加</p>
         <p class="sub" v-if="pageMode === 'overwrite'">覆盖模式需要浏览器弹窗授权写入权限</p>
       </div>
     </div>
@@ -178,7 +178,7 @@
       <div v-if="!selectedTask" class="preview-empty">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <p>从中间列表选择文件查看裁剪对比</p>
-        <p class="sub">或拖拽 PNG 文件 / 文件夹到中间列表</p>
+        <p class="sub">或拖拽 PNG / WebP 文件 / 文件夹到中间列表</p>
       </div>
       <template v-if="selectedTask">
         <div class="compare-wrap">
@@ -302,7 +302,7 @@ function onFolderPick(e) {
 
 function onDropGlobal(e) {
   if (pageMode.value === 'safe') {
-    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === 'image/png' || /\.png$/i.test(f.name))
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => isImageFile(f))
     if (files.length) addFiles(files, false)
   } else if (pageMode.value === 'overwrite') {
     onDropOverwrite(e)
@@ -315,7 +315,7 @@ async function onDropOverwrite(e) {
   if (!pngItems.length) return
 
   // 先同步收集所有普通 File 对象，用于过滤 PNG
-  const plainFiles = pngItems.map(item => item.getAsFile()).filter(f => f && /\.png$/i.test(f.name))
+  const plainFiles = pngItems.map(item => item.getAsFile()).filter(f => f && isImageFile(f))
 
   if (!plainFiles.length) return
 
@@ -337,7 +337,7 @@ async function onDropOverwrite(e) {
       const fh = result.value
       if (!fh || fh.kind !== 'file') continue
       const file = plainFiles[i]
-      if (!file || !/\.png$/i.test(file.name)) continue
+      if (!file || !isImageFile(file)) continue
       writable.push({ fh, file })
     }
 
@@ -360,12 +360,12 @@ async function onDropOverwrite(e) {
     loadPreview(task)
     if (!selectedId.value) selectedId.value = task.id
   }
-  folderPickError.value = '拖入的文件无法自动获取写入权限，已加入预览列表。\n如需覆盖原文件，请使用左侧【批量选择 PNG】按钮导入。'
+  folderPickError.value = '拖入的文件无法自动获取写入权限，已加入预览列表。\n如需覆盖原文件，请使用左侧【批量选择 PNG / WebP】按钮导入。'
 }
 
 function addFiles(files, fromFolder) {
   for (const file of files) {
-    if (file.type !== 'image/png' && !/\.png$/i.test(file.name)) continue
+    if (!isImageFile(file)) continue
     // 相对路径：webkitdirectory 下 file.webkitRelativePath 有值
     const relPath = (fromFolder && file.webkitRelativePath) ? file.webkitRelativePath : file.name
     const task = makeTask(file, relPath)
@@ -459,7 +459,8 @@ function cropImageData(imageData, thr, pad) {
 // 设置裁剪后预览 URL（用 Blob URL + img，保证比例准确）
 async function setCropPreview(task, canvas) {
   if (task.cropPreviewUrl) URL.revokeObjectURL(task.cropPreviewUrl)
-  const blob = await canvasToBlob(canvas)
+  const mime = getOutputMime(task.file)
+  const blob = await canvasToBlob(canvas, mime)
   task.cropPreviewUrl = URL.createObjectURL(blob)
   return blob
 }
@@ -554,7 +555,7 @@ async function pickFilesOverwrite() {
   try {
     fileHandles = await window.showOpenFilePicker({
       multiple: true,
-      types: [{ description: 'PNG Images', accept: { 'image/png': ['.png'] } }],
+      types: [{ description: 'PNG / WebP Images', accept: { 'image/png': ['.png'], 'image/webp': ['.webp'] } }],
     })
   } catch (err) {
     if (err && err.name !== 'AbortError') {
@@ -565,7 +566,7 @@ async function pickFilesOverwrite() {
   if (!fileHandles.length) return
 
   const ok = await showConfirm(
-    `已选择 ${fileHandles.length} 个 PNG 文件。\n\n` +
+    `已选择 ${fileHandles.length} 个文件。\n\n` +
     (autoBackup.value ? '备份将保存在各文件同目录下的 _backup_original_pngs 文件夹中，' : '未开启自动备份，') +
     '处理后原文件将被裁剪版本直接覆盖，文件名保持不变。\n\n是否继续？'
   )
@@ -573,7 +574,7 @@ async function pickFilesOverwrite() {
 
   for (const fh of fileHandles) {
     const file = await fh.getFile()
-    if (file.type !== 'image/png' && !/\.png$/i.test(file.name)) continue
+    if (!isImageFile(file)) continue
     const task = makeTask(file, file.name, fh, null)
     tasks.value.push(task)
     loadPreview(task)
@@ -587,7 +588,7 @@ async function processAllOverwrite() {
   if (!pending.length) return
 
   const ok = await showConfirm(
-    `将对 ${pending.length} 个 PNG 文件执行裁剪并直接覆盖原文件。\n\n是否继续？`
+    `将对 ${pending.length} 个文件执行裁剪并直接覆盖原文件。\n\n是否继续？`
   )
   if (!ok) return
 
@@ -604,9 +605,7 @@ async function processAllOverwrite() {
         await setCropPreview(task, result.canvas)
         skipN++; continue
       }
-      const blob = await canvasToBlob(result.canvas)
-
-      // 备份（仅文件夹来源有 dirHandle，文件选择模式暂不备份到子目录）
+      const blob = await canvasToBlob(result.canvas, getOutputMime(task.file))
       if (autoBackup.value && task.dirHandle) {
         try { await backupFile(task, task.dirHandle) } catch {}
       }
@@ -648,7 +647,7 @@ async function pickFolderOverwrite() {
   // 扫描所有 PNG
   const found = []
   await scanDir(dirHandle, dirHandle, '', found)
-  if (!found.length) { alert('该文件夹中没有找到 PNG 文件。'); return }
+  if (!found.length) { alert('该文件夹中没有找到 PNG / WebP 文件。'); return }
 
   // 加载任务（追加到现有列表）
   for (const { file, relPath, fileHandle: fh, rootHandle: rh } of found) {
@@ -667,7 +666,7 @@ async function scanDir(rootHandle, dirHandle, prefix, results) {
     if (handle.kind === 'directory') {
       if (name === '_backup_original_pngs') continue // 跳过备份目录
       await scanDir(rootHandle, handle, prefix ? prefix + '/' + name : name, results)
-    } else if (handle.kind === 'file' && /\.png$/i.test(name)) {
+    } else if (handle.kind === 'file' && /\.(png|webp)$/i.test(name)) {
       const file = await handle.getFile()
       const relPath = prefix ? prefix + '/' + name : name
       results.push({ file, relPath, fileHandle: handle, rootHandle })
@@ -748,8 +747,21 @@ watch(alphaThreshold, schedulePreview)
 watch(padding, schedulePreview)
 
 // ── 工具 ─────────────────────────────────────
-function canvasToBlob(canvas) {
-  return new Promise(r => canvas.toBlob(r, 'image/png'))
+// 判断是否为支持的图片格式（PNG / WebP）
+function isImageFile(file) {
+  if (!file) return false
+  if (file.type === 'image/png' || file.type === 'image/webp') return true
+  return /\.(png|webp)$/i.test(file.name)
+}
+
+// 根据文件类型选择输出格式：WebP 输出 WebP，PNG 输出 PNG
+function getOutputMime(file) {
+  if (file && (file.type === 'image/webp' || /\.webp$/i.test(file.name))) return 'image/webp'
+  return 'image/png'
+}
+
+function canvasToBlob(canvas, mimeType = 'image/png') {
+  return new Promise(r => canvas.toBlob(r, mimeType))
 }
 function statusLabel(s) {
   return { idle:'待处理', processing:'处理中', done:'已裁剪', overwritten:'已覆盖', skipped:'无需裁剪', transparent:'全透明跳过', error:'失败' }[s] || s
