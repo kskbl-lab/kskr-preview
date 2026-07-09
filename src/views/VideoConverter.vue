@@ -1,5 +1,11 @@
 <template>
-  <div class="converter-page">
+  <div
+    class="converter-page"
+    @dragenter.prevent="dragging = true"
+    @dragover.prevent
+    @dragleave="onDragLeave"
+    @drop.prevent="onDropGlobal"
+  >
 
     <!-- ─── 左侧控制面板 ─────────────────────── -->
     <div class="conv-panel">
@@ -61,11 +67,18 @@
       <!-- 添加文件按钮 -->
       <div class="add-file-area">
         <input ref="fileInput" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple style="display:none" @change="onFileChange" />
-        <button class="btn-add" @click="fileInput.click()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          添加视频文件
-        </button>
-        <div class="add-hint">支持 MP4、MOV、WebM，可多选</div>
+        <input ref="folderInput" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple webkitdirectory style="display:none" @change="onFileChange" />
+        <div class="add-btn-row">
+          <button class="btn-add" @click="fileInput.click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            批量选择视频
+          </button>
+          <button class="btn-add" @click="folderInput.click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            选择文件夹
+          </button>
+        </div>
+        <div class="add-hint">支持 MP4、MOV、WebM，多选或拖入整个文件夹</div>
       </div>
 
       <!-- 任务列表 -->
@@ -117,19 +130,19 @@
       <!-- 空态 -->
       <div v-else class="empty-hint">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        <p>还没有任务，点击"添加视频文件"开始</p>
+        <p>还没有任务，批量选择或拖入视频开始</p>
       </div>
 
     </div>
 
     <!-- ─── 右侧预览区 ─────────────────────── -->
-    <div class="conv-preview" @dragover.prevent @drop.prevent="onDropGlobal">
+    <div class="conv-preview">
 
       <!-- 无选中任务时的占位 -->
       <div v-if="!selectedTask" class="preview-placeholder">
         <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
         <p>点击左侧任务可预览视频</p>
-        <p class="placeholder-sub">或拖拽视频文件到此处添加</p>
+        <p class="placeholder-sub">可一次拖入多个视频或整个文件夹</p>
       </div>
 
       <!-- 视频预览 -->
@@ -197,6 +210,14 @@
 
     </div>
 
+    <div v-if="dragging" class="drop-overlay">
+      <div class="drop-overlay-inner">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 14v5h14v-5"/></svg>
+        <strong>松开即可批量添加</strong>
+        <span>支持多个视频文件和包含视频的文件夹</span>
+      </div>
+    </div>
+
     <!-- 隐藏 canvas -->
     <canvas ref="offCanvas" style="display:none"></canvas>
   </div>
@@ -216,7 +237,9 @@ const fpsPresets  = [12, 16, 24, 30]
 const tasks         = ref([])
 const selectedTaskId = ref(null)
 const fileInput     = ref(null)
+const folderInput   = ref(null)
 const offCanvas     = ref(null)
+const dragging      = ref(false)
 let taskIdCounter   = 0
 
 const selectedTask = computed(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
@@ -228,9 +251,37 @@ function onFileChange(e) {
   e.target.value = ''
 }
 
-function onDropGlobal(e) {
-  const files = Array.from(e.dataTransfer?.files || []).filter(f => /\.(mp4|mov|webm)$/i.test(f.name))
-  if (files.length) addFiles(files)
+async function onDropGlobal(e) {
+  dragging.value = false
+  const items = Array.from(e.dataTransfer?.items || [])
+  const entries = items.map(item => item.webkitGetAsEntry?.()).filter(Boolean)
+  if (entries.length) {
+    const groups = await Promise.all(entries.map(readEntry))
+    addFiles(groups.flat())
+    return
+  }
+  addFiles(Array.from(e.dataTransfer?.files || []))
+}
+
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) dragging.value = false
+}
+
+async function readEntry(entry) {
+  if (entry.isFile) return [await entryFile(entry)]
+  if (!entry.isDirectory) return []
+  const reader = entry.createReader()
+  const entries = []
+  while (true) {
+    const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject))
+    if (!batch.length) break
+    entries.push(...batch)
+  }
+  return (await Promise.all(entries.map(readEntry))).flat()
+}
+
+function entryFile(entry) {
+  return new Promise((resolve, reject) => entry.file(resolve, reject))
 }
 
 function addFiles(files) {
@@ -238,6 +289,7 @@ function addFiles(files) {
     const allowed = /\.(mp4|mov|webm)$/i.test(file.name)
     if (!allowed) continue
     if (file.size > 500 * 1024 * 1024) continue
+    if (tasks.value.some(t => t.file.name === file.name && t.file.size === file.size && t.file.lastModified === file.lastModified)) continue
 
     const task = {
       id: ++taskIdCounter,
@@ -725,6 +777,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .converter-page {
+  position: relative;
   flex: 1; display: flex; overflow: hidden; min-height: 0;
   background: var(--app-bg, #080808);
 }
@@ -806,6 +859,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   display: flex; flex-direction: column; gap: 6px;
 }
+.add-btn-row { display: flex; gap: 6px; }
 .btn-add {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px; width: 100%;
@@ -813,8 +867,23 @@ onBeforeUnmount(() => {
   border-radius: 6px; color: var(--text-dim, #888); font-size: 12.5px;
   cursor: pointer; transition: all 0.15s;
 }
+.add-btn-row .btn-add { flex: 1; font-size: 11.5px; padding: 8px 4px; }
 .btn-add:hover { border-color: var(--border-hover, #444); color: var(--text-primary, #ccc); background: var(--ctrl-hover, #141414); }
 .add-hint { font-size: 10.5px; color: var(--text-muted, #555); text-align: center; }
+
+.drop-overlay {
+  position: absolute; inset: 10px; z-index: 100;
+  display: grid; place-items: center;
+  border: 2px dashed var(--text-dim, #777); border-radius: 14px;
+  background: color-mix(in srgb, var(--app-bg, #080808) 92%, transparent);
+  pointer-events: none;
+}
+.drop-overlay-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  color: var(--text-primary, #ddd);
+}
+.drop-overlay-inner strong { font-size: 16px; }
+.drop-overlay-inner span { color: var(--text-dim, #888); font-size: 11px; }
 
 /* 任务列表 */
 .task-list {
