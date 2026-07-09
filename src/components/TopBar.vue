@@ -2,7 +2,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <div class="logo">
-        <span class="logo-k">K</span><span class="logo-rest">Skr</span>
+        <span class="logo-k">Framen</span><span class="logo-rest">Lab</span>
       </div>
     </div>
 

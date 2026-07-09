@@ -436,7 +436,7 @@ function createPlaceholder() {
   textGrad.addColorStop(0, 'rgba(255,255,255,0.22)')
   textGrad.addColorStop(1, 'rgba(255,255,255,0.06)')
   ctx.fillStyle = textGrad
-  ctx.fillText('KSkr', W*0.08, H*0.46)
+  ctx.fillText('FramenLab', W*0.08, H*0.46)
   ctx.restore()
 
   // 副标题
@@ -452,7 +452,7 @@ function createPlaceholder() {
   ctx.font = '13px monospace'
   ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = 'rgba(255,255,255,0.08)'
-  ctx.fillText('KSkr Studio', W*0.97, H*0.96)
+  ctx.fillText('FramenLab Studio', W*0.97, H*0.96)
   ctx.restore()
 
   const img = new Image()
