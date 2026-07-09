@@ -37,6 +37,23 @@
       </section>
 
       <section v-if="selectedTask" class="section settings">
+        <div class="section-title">压缩策略</div>
+        <div class="quality-modes">
+          <button
+            v-for="mode in qualityModes"
+            :key="mode.id"
+            :class="{ active: selectedTask.mode === mode.id }"
+            :disabled="processing"
+            @click="selectedTask.mode = mode.id"
+          >
+            <strong>{{ mode.name }}</strong>
+            <span>{{ mode.desc }}</span>
+          </button>
+        </div>
+        <button class="apply-all-btn mode-apply" :disabled="processing || tasks.length < 2" @click="applyModeToAll">
+          将“{{ modeName(selectedTask.mode) }}”应用到全部
+        </button>
+
         <div class="section-title">当前任务目标大小</div>
         <div class="source-summary">
           <span>原始大小</span>
@@ -59,10 +76,11 @@
           <div><span>画面缩放</span><strong>{{ taskScalePercent(selectedTask) }}%</strong></div>
         </div>
         <div v-if="selectedTask.targetError" class="error">{{ selectedTask.targetError }}</div>
+        <div v-if="qualityWarning(selectedTask)" class="quality-warning">{{ qualityWarning(selectedTask) }}</div>
         <button class="apply-all-btn" :disabled="processing || tasks.length < 2" @click="applyRatioToAll">
           将 {{ taskPercent(selectedTask) }}% 比例应用到全部
         </button>
-        <div class="hint">每个任务都可以设置不同大小；画面宽高等比例缩放。</div>
+        <div class="hint">每个任务都可以设置不同策略和大小；目标体积是编码估算值。</div>
       </section>
 
       <div class="panel-footer">
@@ -148,6 +166,11 @@ const sourceType = ref('video')
 const videoInput = ref(null), pngInput = ref(null), folderInput = ref(null), canvas = ref(null)
 const tasks = ref([]), selectedId = ref(null), processing = ref(false), cancelled = ref(false), dragging = ref(false)
 const ratios = [25, 50, 75]
+const qualityModes = [
+  { id: 'quality', name: '画质优先', desc: '保持原分辨率' },
+  { id: 'balanced', name: '均衡压缩', desc: '轻微缩放' },
+  { id: 'size', name: '体积优先', desc: '尽量接近目标' },
+]
 let taskCounter = 0
 
 const selectedTask = computed(() => tasks.value.find(t => t.id === selectedId.value) || null)
@@ -222,7 +245,7 @@ function makeTask(type, name, files) {
   return {
     id: ++taskCounter, type, name, files, totalBytes,
     targetMB: Number((totalBytes / 1048576 * .5).toFixed(3)),
-    targetError: '', previewUrl: '', dimensions: null, duration: 0,
+    targetError: '', mode: 'quality', previewUrl: '', dimensions: null, duration: 0,
     status: 'idle', statusText: '等待压缩', progress: 0, cancelled: false,
     downloadUrl: '', downloadName: '', outputBytes: 0,
   }
@@ -250,6 +273,10 @@ function applyRatioToAll() {
     task.targetMB = Number((task.totalBytes / 1048576 * ratio).toFixed(3))
     validateTask(task)
   })
+}
+function applyModeToAll() {
+  const mode = selectedTask.value.mode
+  tasks.value.forEach(task => { task.mode = mode })
 }
 
 async function startAll() {
@@ -285,7 +312,9 @@ async function compressVideo(task) {
   const ctx = c.getContext('2d'), stream = c.captureStream(30)
   const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(x => MediaRecorder.isTypeSupported(x))
   if (!mime) throw new Error('当前浏览器不支持视频编码')
-  const chunks = [], bitrate = Math.max(150000, Math.floor(taskTargetBytes(task) * 8 / Math.max(1, video.duration) * .92))
+  const targetBitrate = Math.floor(taskTargetBytes(task) * 8 / Math.max(1, video.duration) * .92)
+  const qualityFloor = task.mode === 'quality' ? w * h * 30 * .075 : task.mode === 'balanced' ? w * h * 30 * .04 : 0
+  const chunks = [], bitrate = Math.max(150000, Math.floor(Math.max(targetBitrate, qualityFloor)))
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate })
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
   const stopped = once(recorder, 'stop')
@@ -367,9 +396,20 @@ function filePath(file) { return file.webkitRelativePath || file.name }
 function relativeFramePath(file) { const parts = filePath(file).split('/'); return parts.length > 1 ? parts.slice(1).join('/') : file.name }
 function safeName(name) { return name.replace(/[\\/:*?"<>|]+/g, '_') }
 function taskTargetBytes(task) { return Math.max(0, Number(task?.targetMB) || 0) * 1048576 }
-function taskScale(task) { return Math.min(1, Math.max(.05, Math.sqrt(taskTargetBytes(task) / Math.max(1, task.totalBytes)))) }
+function taskScale(task) {
+  const targetScale = Math.sqrt(taskTargetBytes(task) / Math.max(1, task.totalBytes))
+  if (task.mode === 'quality') return 1
+  if (task.mode === 'balanced') return Math.min(1, Math.max(.75, targetScale))
+  return Math.min(1, Math.max(.05, targetScale))
+}
 function taskPercent(task) { return Math.min(100, Math.round(taskTargetBytes(task) / task.totalBytes * 100)) }
 function taskScalePercent(task) { return Math.round(taskScale(task) * 100) }
+function modeName(id) { return qualityModes.find(mode => mode.id === id)?.name || id }
+function qualityWarning(task) {
+  if (task.mode === 'quality' && taskPercent(task) < 40) return '目标体积较小：为保护清晰度，实际输出可能大于目标大小。'
+  if (task.mode === 'balanced' && taskPercent(task) < 20) return '目标体积过小：均衡模式会优先避免严重失真，实际输出可能偏大。'
+  return ''
+}
 function outputDimensions(task) { return task.dimensions ? `${even(task.dimensions.w * taskScale(task))} × ${even(task.dimensions.h * taskScale(task))}` : '读取中' }
 function taskDescription(task) { return task.type === 'video' ? `${formatSize(task.totalBytes)}${task.duration ? ` · ${formatDuration(task.duration)}` : ''}` : `${task.files.length} 个 PNG · ${formatSize(task.totalBytes)}` }
 function statusLabel(status) { return ({ idle:'等待', running:'处理中', done:'完成', error:'失败', cancelled:'已取消' })[status] || status }
@@ -392,7 +432,8 @@ onBeforeUnmount(clearAll)
 .text-btn{border:0;background:none;color:var(--text-dim);cursor:pointer}.text-btn.danger:hover{color:#d87979}.section{padding:15px 16px;border-bottom:1px solid var(--border)}.section-title{margin-bottom:10px;font-size:10.5px;font-weight:600;letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase}
 .type-tabs,.preset-row,.import-row{display:flex;gap:7px}.type-tabs button,.preset-row button,.import-btn{flex:1;height:34px;border:1px solid var(--border);border-radius:6px;background:var(--ctrl-bg);color:var(--text-dim);cursor:pointer;font:inherit;font-size:12px}.type-tabs button{display:flex;align-items:center;justify-content:center;gap:6px}.type-tabs button.active,.preset-row button.active{color:var(--text-primary);border-color:var(--border-hover);background:var(--ctrl-active)}button:disabled{opacity:.4;cursor:not-allowed}.import-btn:hover:not(:disabled){border-color:var(--border-hover);color:var(--text-primary)}
 .source-summary,.size-input-wrap,.scale-info>div{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text-dim)}.source-summary strong,.scale-info strong{color:var(--text-primary)}.preset-row{margin:12px 0}.preset-row button{height:28px}.size-input-wrap{margin:8px 0 12px}.size-input{width:130px;display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--ctrl-bg)}.size-input input{width:82px;padding:8px;border:0;outline:0;color:var(--text-primary);background:transparent;font:inherit;text-align:right}.size-input span{padding:8px;color:var(--text-muted);border-left:1px solid var(--border)}
-.scale-info{display:grid;grid-template-columns:1fr 1fr;gap:8px}.scale-info>div{padding:9px;border:1px solid var(--border);border-radius:6px;background:var(--ctrl-bg)}.error{margin-top:8px;padding:7px 9px;border-radius:5px;color:#d87979;background:rgba(180,50,50,.08);font-size:11px}.apply-all-btn{width:100%;margin-top:10px;padding:7px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--text-dim);font-size:11px;cursor:pointer}
+.quality-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}.quality-modes button{min-width:0;padding:8px 4px;border:1px solid var(--border);border-radius:6px;background:var(--ctrl-bg);color:var(--text-muted);cursor:pointer}.quality-modes button.active{border-color:var(--border-hover);background:var(--ctrl-active);color:var(--text-primary)}.quality-modes strong,.quality-modes span{display:block}.quality-modes strong{font-size:11px}.quality-modes span{margin-top:3px;font-size:8px;white-space:nowrap}.mode-apply{margin:0 0 18px}.settings>.section-title:not(:first-child){margin-top:2px}
+.scale-info{display:grid;grid-template-columns:1fr 1fr;gap:8px}.scale-info>div{padding:9px;border:1px solid var(--border);border-radius:6px;background:var(--ctrl-bg)}.error{margin-top:8px;padding:7px 9px;border-radius:5px;color:#d87979;background:rgba(180,50,50,.08);font-size:11px}.quality-warning{margin-top:8px;padding:8px 9px;border:1px solid rgba(210,157,76,.22);border-radius:5px;background:rgba(210,157,76,.08);color:#c89b5b;font-size:10px;line-height:1.45}.apply-all-btn{width:100%;margin-top:10px;padding:7px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--text-dim);font-size:11px;cursor:pointer}
 .panel-footer{margin-top:auto;padding:16px}.primary-btn,.download-btn{width:100%;height:38px;border:1px solid var(--border-hover);border-radius:7px;background:var(--text-primary);color:var(--app-bg);font:inherit;font-size:12px;font-weight:600;cursor:pointer}.progress-track{height:3px;margin-top:10px;overflow:hidden;border-radius:3px;background:var(--ctrl-bg)}.progress-track div{height:100%;background:var(--text-primary)}.cancel-btn,.batch-download{width:100%;margin-top:8px;padding:7px;border:0;background:none;color:var(--text-dim);cursor:pointer;font-size:11px}.batch-download{border:1px solid var(--border);border-radius:5px}
 .queue-panel{width:270px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--sidebar-bg)}.queue-header{height:46px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:11px}.task-list{padding:8px;overflow-y:auto}.task-item{position:relative;width:100%;display:flex;align-items:center;gap:9px;padding:9px 24px 9px 8px;margin-bottom:5px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text-dim);text-align:left;cursor:pointer}.task-item:hover{background:var(--ctrl-hover)}.task-item.selected{border-color:var(--border-hover);background:var(--ctrl-active)}.task-icon{width:32px;height:25px;display:grid;place-items:center;border:1px solid var(--border);border-radius:4px;background:var(--ctrl-bg);font-size:8px}.task-content{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}.task-content strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary);font-size:11px}.task-content small{color:var(--text-muted);font-size:9px}.task-status{font-size:9px;color:var(--text-muted)}.status-done .task-status{color:#73a986}.status-error .task-status{color:#d87979}.remove-task{position:absolute;right:5px;top:4px;opacity:0;color:var(--text-muted);font-size:15px}.task-item:hover .remove-task{opacity:1}.mini-progress{height:2px;background:var(--border);border-radius:2px}.mini-progress i{display:block;height:100%;background:var(--text-primary)}.queue-empty{flex:1;display:grid;place-items:center;color:var(--text-muted);font-size:11px}
 .workspace{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;padding:26px 30px;overflow:auto}.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted)}.empty-icon{width:92px;height:92px;display:grid;place-items:center;margin-bottom:14px;border:1px dashed var(--border-hover);border-radius:22px}.empty-state p{margin:0 0 6px;font-size:14px;color:var(--text-dim)}.empty-state span{font-size:11px}
