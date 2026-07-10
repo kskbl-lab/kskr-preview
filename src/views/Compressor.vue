@@ -27,13 +27,13 @@
         <div class="section-title">批量导入</div>
         <input ref="videoInput" type="file" accept="video/mp4,.mp4" multiple hidden @change="onVideoPick" />
         <input ref="pngInput" type="file" accept="image/png,.png" multiple hidden @change="onPngPick" />
-        <input ref="folderInput" type="file" accept="image/png,.png" multiple webkitdirectory hidden @change="onFolderPick" />
+        <input ref="folderInput" type="file" accept="image/png,.png" multiple webkitdirectory directory hidden @change="onFolderPick" />
         <button v-if="sourceType === 'video'" class="import-btn" :disabled="processing" @click="videoInput.click()">批量选择 MP4</button>
         <div v-else class="import-row">
-          <button class="import-btn" :disabled="processing" @click="pngInput.click()">选择 PNG</button>
-          <button class="import-btn" :disabled="processing" @click="folderInput.click()">选择文件夹</button>
+          <button class="import-btn" :disabled="processing" @click="pngInput.click()">批量选择 PNG</button>
+          <button class="import-btn" :disabled="processing" @click="folderInput.click()">追加文件夹</button>
         </div>
-        <div class="hint">{{ sourceType === 'video' ? '支持多选，或一次拖入多个 MP4' : '一次导入作为一组序列帧；拖入多个文件夹会分别建组' }}</div>
+        <div class="hint">{{ sourceType === 'video' ? '支持多选，或一次拖入多个 MP4' : 'PNG 可多选；文件夹可重复追加，拖入多个文件夹会分别建组' }}</div>
       </section>
 
       <section v-if="selectedTask" class="section settings">
@@ -183,8 +183,7 @@ function onVideoPick(e) { addVideos(Array.from(e.target.files || [])); e.target.
 function onPngPick(e) { addPngGroup(Array.from(e.target.files || []), 'PNG 序列帧'); e.target.value = '' }
 function onFolderPick(e) {
   const files = Array.from(e.target.files || [])
-  const root = files[0]?.webkitRelativePath?.split('/')[0] || 'PNG 序列帧'
-  addPngGroup(files, root)
+  addPngGroups(files, 'PNG 序列帧')
   e.target.value = ''
 }
 async function onDrop(e) {
@@ -239,6 +238,15 @@ async function addPngGroup(files, name) {
   } catch { task.status = 'error'; task.statusText = '首帧读取失败' }
   tasks.value.push(task)
   selectedId.value ||= task.id
+}
+function addPngGroups(files, fallbackName) {
+  const groups = files.filter(isPng).reduce((map, file) => {
+    const root = file.webkitRelativePath?.split('/')[0] || fallbackName
+    if (!map.has(root)) map.set(root, [])
+    map.get(root).push(file)
+    return map
+  }, new Map())
+  for (const [name, groupFiles] of groups) addPngGroup(groupFiles, name)
 }
 function makeTask(type, name, files) {
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
