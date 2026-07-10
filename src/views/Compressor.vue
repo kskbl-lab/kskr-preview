@@ -335,6 +335,8 @@ async function compressVideo(task) {
 }
 async function compressPngs(task) {
   const zip = new JSZip(), folder = zip.folder('compressed_frames'), c = canvas.value, s = taskScale(task)
+  let keptOriginal = 0
+  let optimizedFrames = 0
   for (let i = 0; i < task.files.length; i++) {
     if (cancelled.value || task.cancelled) throw new Error('cancelled')
     const file = task.files[i], url = URL.createObjectURL(file)
@@ -342,21 +344,31 @@ async function compressPngs(task) {
       const img = await loadImage(url)
       c.width = even(img.naturalWidth * s); c.height = even(img.naturalHeight * s)
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
-      folder.file(relativeFramePath(file), await canvasBlob(c, 'image/png'))
+      const encoded = await canvasBlob(c, 'image/png')
+      const output = encoded.size < file.size ? encoded : file
+      if (output === file) keptOriginal++
+      else optimizedFrames++
+      folder.file(relativeFramePath(file), output, { compression: 'STORE' })
     } finally { URL.revokeObjectURL(url) }
     task.progress = (i + 1) / task.files.length * 85
-    task.statusText = `正在处理第 ${i + 1} / ${task.files.length} 帧…`
+    task.statusText = `正在处理第 ${i + 1} / ${task.files.length} 帧… 已优化 ${optimizedFrames} 帧`
     if (i % 4 === 0) await sleep(0)
   }
   task.statusText = '正在打包 PNG 序列帧…'
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } }, m => { task.progress = 85 + m.percent * .15 })
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, m => { task.progress = 85 + m.percent * .15 })
   if (cancelled.value || task.cancelled) throw new Error('cancelled')
-  finish(task, blob, `${safeName(task.name)}_compressed.zip`)
+  const detail = keptOriginal
+    ? `；${keptOriginal} 帧已保留原图以避免越压越大`
+    : ''
+  finish(task, blob, `${safeName(task.name)}_compressed.zip`, detail)
 }
-function finish(task, blob, name) {
+function finish(task, blob, name, detail = '') {
   task.downloadUrl = URL.createObjectURL(blob); task.downloadName = name; task.outputBytes = blob.size
   task.progress = 100; task.status = 'done'
-  task.statusText = `压缩完成，实际减少 ${Math.max(0, Math.round((1 - blob.size / task.totalBytes) * 100))}%`
+  const ratio = Math.round((1 - blob.size / task.totalBytes) * 100)
+  task.statusText = ratio >= 0
+    ? `压缩完成，实际减少 ${ratio}%${detail}`
+    : `已完成，但结果因打包开销增大 ${Math.abs(ratio)}%${detail}；这组 PNG 已接近无损压缩极限`
 }
 async function downloadAll() {
   const zip = new JSZip()
