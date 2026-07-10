@@ -57,7 +57,7 @@
           <div class="section-title">导入文件</div>
           <div class="import-btns">
             <input ref="filePicker"   type="file" accept="image/png,image/webp" multiple style="display:none" @change="onFilePick" />
-            <input ref="folderPicker" type="file" accept="image/png,image/webp" multiple webkitdirectory style="display:none" @change="onFolderPick" />
+            <input ref="folderPicker" type="file" multiple webkitdirectory directory style="display:none" @change="onFolderPick" />
             <button class="btn-import" @click="filePicker.click()">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
               选择 PNG / WebP
@@ -67,7 +67,7 @@
               选择文件夹
             </button>
           </div>
-          <div class="add-hint">支持多选 PNG / WebP；文件夹导入保留相对路径</div>
+          <div class="add-hint">支持多选 PNG / WebP；文件夹会自动跳过系统隐藏文件，只导入图片</div>
         </div>
       </template>
 
@@ -639,7 +639,7 @@ async function pickFolderOverwrite() {
     dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
   } catch (err) {
     if (err && err.name !== 'AbortError') {
-      folderPickError.value = '无法访问该文件夹。\n\n浏览器禁止写入系统保护目录（如 /Applications、/System 等）。\n\n解决方法：\n① 将文件夹移到桌面或"文稿"后再操作\n② 或切换到「安全模式」→ 选择文件夹 → 下载 ZIP → 手动解压覆盖'
+      folderPickError.value = '无法访问该文件夹。\n\n如果弹窗提示含有系统文件，请切换到「安全模式」选择文件夹；安全模式会自动跳过 .DS_Store 等隐藏文件。\n\n如果是 /Applications、/System 等系统保护目录，浏览器不允许网页直接写回，请将素材复制到桌面或“文稿”后再操作。'
     }
     return
   }
