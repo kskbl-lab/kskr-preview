@@ -80,7 +80,7 @@
         <button class="apply-all-btn" :disabled="processing || tasks.length < 2" @click="applyRatioToAll">
           将 {{ taskPercent(selectedTask) }}% 比例应用到全部
         </button>
-        <div class="hint">每个任务都可以设置不同策略和大小；目标体积是编码估算值。</div>
+        <div class="hint">目标大小会作为输出上限；若浏览器端无法达到，会在结果中明确提示。</div>
       </section>
 
       <div class="panel-footer">
@@ -167,9 +167,9 @@ const videoInput = ref(null), pngInput = ref(null), folderInput = ref(null), can
 const tasks = ref([]), selectedId = ref(null), processing = ref(false), cancelled = ref(false), dragging = ref(false)
 const ratios = [25, 50, 75]
 const qualityModes = [
-  { id: 'quality', name: '画质优先', desc: '保持原分辨率' },
-  { id: 'balanced', name: '均衡压缩', desc: '轻微缩放' },
-  { id: 'size', name: '体积优先', desc: '尽量接近目标' },
+  { id: 'quality', name: '画质优先', desc: '少压一点' },
+  { id: 'balanced', name: '均衡压缩', desc: '贴近目标' },
+  { id: 'size', name: '体积优先', desc: '优先变小' },
 ]
 let taskCounter = 0
 
@@ -255,7 +255,7 @@ function makeTask(type, name, files) {
     targetMB: Number((totalBytes / 1048576 * .5).toFixed(3)),
     targetError: '', mode: 'quality', previewUrl: '', dimensions: null, duration: 0,
     status: 'idle', statusText: '等待压缩', progress: 0, cancelled: false,
-    downloadUrl: '', downloadName: '', outputBytes: 0,
+    downloadUrl: '', downloadName: '', outputBytes: 0, outputScale: null,
   }
 }
 
@@ -315,34 +315,70 @@ async function compressVideo(task) {
   await once(video, 'loadedmetadata')
   task.duration = video.duration
   task.dimensions ||= { w: video.videoWidth, h: video.videoHeight }
-  const s = taskScale(task), w = even(video.videoWidth * s), h = even(video.videoHeight * s)
+  const target = taskTargetBytes(task)
+  let scale = taskScale(task)
+  let result = null
+  const maxPasses = task.mode === 'quality' ? 2 : task.mode === 'balanced' ? 3 : 4
+  for (let pass = 1; pass <= maxPasses; pass++) {
+    result = await renderVideoBlob(task, video, scale, pass, maxPasses)
+    if (result.blob.size <= target || scale <= minTaskScale(task)) break
+    scale = nextMediaScale(scale, result.blob.size, target, task)
+  }
+  const ext = result.mime.startsWith('video/mp4') ? 'mp4' : 'webm'
+  finish(task, result.blob, `${stripExt(task.name)}_compressed.${ext}`, '', result.scale)
+}
+async function renderVideoBlob(task, video, scale, pass, maxPasses) {
+  await seekVideo(video, 0)
+  const w = even(video.videoWidth * scale), h = even(video.videoHeight * scale)
   const c = canvas.value; c.width = w; c.height = h
   const ctx = c.getContext('2d'), stream = c.captureStream(30)
   const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(x => MediaRecorder.isTypeSupported(x))
   if (!mime) throw new Error('当前浏览器不支持视频编码')
-  const targetBitrate = Math.floor(taskTargetBytes(task) * 8 / Math.max(1, video.duration) * .92)
-  const qualityFloor = task.mode === 'quality' ? w * h * 30 * .075 : task.mode === 'balanced' ? w * h * 30 * .04 : 0
-  const chunks = [], bitrate = Math.max(150000, Math.floor(Math.max(targetBitrate, qualityFloor)))
+  const targetBitrate = Math.floor(taskTargetBytes(task) * 8 / Math.max(1, video.duration) * videoBitrateReserve(task))
+  const scaleFactor = Math.max(.18, scale * scale)
+  const passFactor = Math.pow(.82, pass - 1)
+  const chunks = [], bitrate = Math.max(50000, Math.floor(targetBitrate * scaleFactor * passFactor))
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate })
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
   const stopped = once(recorder, 'stop')
   recorder.start(500); await video.play()
-  task.statusText = '正在等比例缩放并编码视频…'
+  task.statusText = `正在等比例缩放并编码视频… 第 ${pass}/${maxPasses} 轮`
   await new Promise((resolve, reject) => {
     const draw = () => {
       if (cancelled.value || task.cancelled || video.ended) { resolve(); return }
-      try { ctx.drawImage(video, 0, 0, w, h); task.progress = Math.min(99, video.currentTime / video.duration * 100); requestAnimationFrame(draw) }
+      try {
+        ctx.drawImage(video, 0, 0, w, h)
+        const passBase = (pass - 1) / maxPasses
+        const passProgress = video.currentTime / video.duration / maxPasses
+        task.progress = Math.min(99, (passBase + passProgress) * 100)
+        requestAnimationFrame(draw)
+      }
       catch (e) { reject(e) }
     }
     draw()
   })
   video.pause(); recorder.stop(); await stopped
+  stream.getTracks().forEach(track => track.stop())
   if (cancelled.value || task.cancelled) throw new Error('cancelled')
-  const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm'
-  finish(task, new Blob(chunks, { type: mime }), `${stripExt(task.name)}_compressed.${ext}`)
+  return { blob: new Blob(chunks, { type: mime }), mime, scale }
 }
 async function compressPngs(task) {
-  const zip = new JSZip(), folder = zip.folder('compressed_frames'), c = canvas.value, s = taskScale(task)
+  const target = taskTargetBytes(task)
+  let scale = taskScale(task)
+  let result = null
+  const maxPasses = task.mode === 'quality' ? 3 : task.mode === 'balanced' ? 4 : 5
+  for (let pass = 1; pass <= maxPasses; pass++) {
+    result = await renderPngZip(task, scale, pass, maxPasses, result?.blob.size > target)
+    if (result.blob.size <= target || scale <= minTaskScale(task)) break
+    scale = nextMediaScale(scale, result.blob.size, target, task)
+  }
+  const detail = result.keptOriginal
+    ? `；${result.keptOriginal} 帧已保留原图以避免越压越大`
+    : ''
+  finish(task, result.blob, `${safeName(task.name)}_compressed.zip`, detail, result.scale)
+}
+async function renderPngZip(task, scale, pass, maxPasses, forceEncoded = false) {
+  const zip = new JSZip(), folder = zip.folder('compressed_frames'), c = canvas.value
   let keptOriginal = 0
   let optimizedFrames = 0
   for (let i = 0; i < task.files.length; i++) {
@@ -350,33 +386,37 @@ async function compressPngs(task) {
     const file = task.files[i], url = URL.createObjectURL(file)
     try {
       const img = await loadImage(url)
-      c.width = even(img.naturalWidth * s); c.height = even(img.naturalHeight * s)
+      c.width = even(img.naturalWidth * scale); c.height = even(img.naturalHeight * scale)
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
       const encoded = await canvasBlob(c, 'image/png')
-      const output = encoded.size < file.size ? encoded : file
+      const output = forceEncoded || encoded.size < file.size ? encoded : file
       if (output === file) keptOriginal++
       else optimizedFrames++
       folder.file(relativeFramePath(file), output, { compression: 'STORE' })
     } finally { URL.revokeObjectURL(url) }
-    task.progress = (i + 1) / task.files.length * 85
-    task.statusText = `正在处理第 ${i + 1} / ${task.files.length} 帧… 已优化 ${optimizedFrames} 帧`
+    const passBase = (pass - 1) / maxPasses
+    const passProgress = (i + 1) / task.files.length / maxPasses
+    task.progress = (passBase + passProgress) * 85
+    task.statusText = `正在处理第 ${i + 1} / ${task.files.length} 帧… 第 ${pass}/${maxPasses} 轮，已优化 ${optimizedFrames} 帧`
     if (i % 4 === 0) await sleep(0)
   }
   task.statusText = '正在打包 PNG 序列帧…'
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, m => { task.progress = 85 + m.percent * .15 })
   if (cancelled.value || task.cancelled) throw new Error('cancelled')
-  const detail = keptOriginal
-    ? `；${keptOriginal} 帧已保留原图以避免越压越大`
-    : ''
-  finish(task, blob, `${safeName(task.name)}_compressed.zip`, detail)
+  return { blob, keptOriginal, optimizedFrames, scale }
 }
-function finish(task, blob, name, detail = '') {
+function finish(task, blob, name, detail = '', scale = null) {
   task.downloadUrl = URL.createObjectURL(blob); task.downloadName = name; task.outputBytes = blob.size
+  task.outputScale = scale
   task.progress = 100; task.status = 'done'
+  const target = taskTargetBytes(task)
+  const targetStatus = blob.size <= target
+    ? `已达到目标 ${formatSize(target)}`
+    : `未达到目标，超出 ${formatSize(blob.size - target)}`
   const ratio = Math.round((1 - blob.size / task.totalBytes) * 100)
   task.statusText = ratio >= 0
-    ? `压缩完成，实际减少 ${ratio}%${detail}`
-    : `已完成，但结果因打包开销增大 ${Math.abs(ratio)}%${detail}；这组 PNG 已接近无损压缩极限`
+    ? `压缩完成，实际减少 ${ratio}%；${targetStatus}${detail}`
+    : `已完成，但结果因打包开销增大 ${Math.abs(ratio)}%；${targetStatus}${detail}`
 }
 async function downloadAll() {
   const zip = new JSZip()
@@ -395,7 +435,7 @@ function removeTask(task) {
 }
 function clearAll() { cancelAll(); tasks.value.forEach(releaseTask); tasks.value = []; selectedId.value = null }
 function releaseTask(task) { if (task.previewUrl) URL.revokeObjectURL(task.previewUrl); resetOutput(task) }
-function resetOutput(task) { if (task.downloadUrl) URL.revokeObjectURL(task.downloadUrl); task.downloadUrl = ''; task.downloadName = ''; task.outputBytes = 0 }
+function resetOutput(task) { if (task.downloadUrl) URL.revokeObjectURL(task.downloadUrl); task.downloadUrl = ''; task.downloadName = ''; task.outputBytes = 0; task.outputScale = null }
 function onVideoMetadata(e, task) { task.dimensions = { w: e.target.videoWidth, h: e.target.videoHeight }; task.duration = e.target.duration }
 
 async function readEntry(entry) {
@@ -418,19 +458,21 @@ function safeName(name) { return name.replace(/[\\/:*?"<>|]+/g, '_') }
 function taskTargetBytes(task) { return Math.max(0, Number(task?.targetMB) || 0) * 1048576 }
 function taskScale(task) {
   const targetScale = Math.sqrt(taskTargetBytes(task) / Math.max(1, task.totalBytes))
-  if (task.mode === 'quality') return 1
-  if (task.mode === 'balanced') return Math.min(1, Math.max(.75, targetScale))
-  return Math.min(1, Math.max(.05, targetScale))
+  const adjustedScale = task.mode === 'quality' ? targetScale * 1.08 : task.mode === 'balanced' ? targetScale : targetScale * .92
+  return Math.min(1, Math.max(minTaskScale(task), adjustedScale))
 }
 function taskPercent(task) { return Math.min(100, Math.round(taskTargetBytes(task) / task.totalBytes * 100)) }
 function taskScalePercent(task) { return Math.round(taskScale(task) * 100) }
 function modeName(id) { return qualityModes.find(mode => mode.id === id)?.name || id }
 function qualityWarning(task) {
-  if (task.mode === 'quality' && taskPercent(task) < 40) return '目标体积较小：为保护清晰度，实际输出可能大于目标大小。'
-  if (task.mode === 'balanced' && taskPercent(task) < 20) return '目标体积过小：均衡模式会优先避免严重失真，实际输出可能偏大。'
+  if (task.mode === 'quality' && taskPercent(task) < 40) return '目标体积较小：画质优先会少压一点，如需更接近目标可切到均衡或体积优先。'
+  if (task.mode === 'balanced' && taskPercent(task) < 20) return '目标体积过小：如果仍偏大，建议切到体积优先。'
   return ''
 }
-function outputDimensions(task) { return task.dimensions ? `${even(task.dimensions.w * taskScale(task))} × ${even(task.dimensions.h * taskScale(task))}` : '读取中' }
+function outputDimensions(task) {
+  const scale = task.outputScale || taskScale(task)
+  return task.dimensions ? `${even(task.dimensions.w * scale)} × ${even(task.dimensions.h * scale)}` : '读取中'
+}
 function taskDescription(task) { return task.type === 'video' ? `${formatSize(task.totalBytes)}${task.duration ? ` · ${formatDuration(task.duration)}` : ''}` : `${task.files.length} 个 PNG · ${formatSize(task.totalBytes)}` }
 function statusLabel(status) { return ({ idle:'等待', running:'处理中', done:'完成', error:'失败', cancelled:'已取消' })[status] || status }
 function once(el, event) { return new Promise((resolve, reject) => { el.addEventListener(event, resolve, { once:true }); el.addEventListener('error', () => reject(new Error('素材读取失败')), { once:true }) }) }
@@ -442,6 +484,20 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 function stripExt(name) { return name.replace(/\.[^.]+$/, '') }
 function formatDuration(sec) { return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}` }
 function formatSize(bytes) { if (!bytes) return '0 B'; if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1048576).toFixed(2)} MB` }
+function minTaskScale(task) { return task.mode === 'quality' ? .38 : task.mode === 'balanced' ? .24 : .08 }
+function nextMediaScale(scale, actualBytes, targetBytes, task) {
+  const ratio = Math.sqrt(targetBytes / Math.max(1, actualBytes)) * .94
+  return Math.max(minTaskScale(task), Math.min(scale * .88, scale * ratio))
+}
+function videoBitrateReserve(task) { return task.mode === 'quality' ? .9 : task.mode === 'balanced' ? .82 : .72 }
+function seekVideo(video, time) {
+  return new Promise((resolve, reject) => {
+    if (Math.abs(video.currentTime - time) < .02) { resolve(); return }
+    video.addEventListener('seeked', resolve, { once: true })
+    video.addEventListener('error', () => reject(new Error('视频定位失败')), { once: true })
+    video.currentTime = time
+  })
+}
 onBeforeUnmount(clearAll)
 </script>
 
