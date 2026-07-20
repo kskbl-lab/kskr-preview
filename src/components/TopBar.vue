@@ -1,12 +1,20 @@
 <template>
   <header class="topbar">
     <div class="topbar-left">
-      <div class="logo">
+      <button class="logo" type="button" title="返回首页" @click="$emit('home')">
         <span class="logo-k">Framen</span><span class="logo-rest">Lab</span>
-      </div>
+      </button>
+      <template v-if="workspaceOpen">
+        <span class="workspace-mark">/ WORKSPACE</span>
+        <strong class="workspace-title">{{ workspaceTitle }}</strong>
+      </template>
     </div>
 
     <div class="topbar-right">
+      <button v-if="workspaceOpen" class="back-home" type="button" @click="$emit('home')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h10"/></svg>
+        返回首页
+      </button>
       <a href="https://kskr.kuaishou.com" target="_blank" class="topbar-link">文档</a>
       <a href="#" class="topbar-link">更新日志</a>
 
@@ -33,8 +41,10 @@
 defineProps({
   currentTheme: { type: String, default: 'dark' },
   currentRoute: { type: String, default: '/' },
+  workspaceOpen: { type: Boolean, default: false },
+  workspaceTitle: { type: String, default: '' },
 })
-defineEmits(['set-theme', 'nav'])
+defineEmits(['set-theme', 'nav', 'home'])
 
 const themes = [
   { id: 'dark',  label: '黑色',  color: '#111' },
@@ -57,10 +67,30 @@ const themes = [
 .logo {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 20px; font-weight: 700; letter-spacing: -0.5px;
-  cursor: default; user-select: none;
+  cursor: pointer; user-select: none;
+  padding: 0; border: 0; background: transparent;
 }
 .logo-k   { color: var(--text-primary, #fff); }
 .logo-rest { color: var(--text-muted, #555); }
+.workspace-mark {
+  color: var(--text-muted, #555);
+  font: 600 8px/1 'Space Grotesk', sans-serif;
+  letter-spacing: 1.6px;
+}
+.workspace-title {
+  color: var(--text-dim, #888);
+  font-size: 10px; font-weight: 500; letter-spacing: .4px;
+}
+
+.back-home {
+  height: 30px; display: flex; align-items: center; gap: 7px;
+  padding: 0 13px; border: 1px solid var(--border-hover, #333);
+  border-radius: 16px; background: var(--ctrl-bg, #111);
+  color: var(--text-primary, #ddd); font: inherit; font-size: 11px;
+  cursor: pointer; transition: background .22s, border-color .22s, transform .22s;
+}
+.back-home svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.back-home:hover { background: var(--ctrl-active, #1a1a1a); border-color: var(--text-dim, #777); transform: translateX(-2px); }
 
 .topbar-link {
   font-size: 13px; color: var(--text-dim, #666);
