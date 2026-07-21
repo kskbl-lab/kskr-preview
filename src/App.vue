@@ -84,6 +84,7 @@
                     <svg v-if="module.icon === 'preview'" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
                     <svg v-else-if="module.icon === 'convert'" viewBox="0 0 24 24"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m16 10 6-3v10l-6-3M6 12h6m-2-2 2 2-2 2"/></svg>
                     <svg v-else-if="module.icon === 'crop'" viewBox="0 0 24 24"><path d="M7 3v14a2 2 0 0 0 2 2h12M3 7h14a2 2 0 0 1 2 2v12"/></svg>
+                    <svg v-else-if="module.icon === 'keyer'" viewBox="0 0 24 24"><path d="m14 3 7 7-9 9H5v-7l9-9Z"/><path d="m8 9 7 7M4 21h16"/></svg>
                     <svg v-else viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5M3 3l6 6m12-6-6 6M3 21l6-6m12 6-6-6"/></svg>
                   </span>
                   <span class="module-content">
@@ -103,7 +104,7 @@
             </div>
 
             <div class="modules-footer">
-              <span>04 ACTIVE MODULES</span>
+              <span>05 ACTIVE MODULES</span>
               <i></i>
               <span>EXTENDABLE WORKSPACE SYSTEM</span>
             </div>
@@ -123,7 +124,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BorderGlow from './components/BorderGlow.vue'
 import PrismBackground from './components/PrismBackground.vue'
@@ -134,6 +135,7 @@ const modules = [
   { number: '02', title: '视频转换', english: 'VIDEO CONVERTER', description: '批量导入视频转为序列帧和 GIF', path: '/convert', icon: 'convert', accent: '#786dff', glowColor: '246 100 72', glowSecondary: '#b96cff' },
   { number: '03', title: 'PNG 裁剪器', english: 'PNG CROPPER', description: '自动移除图片周围的透明像素', path: '/png-crop', icon: 'crop', accent: '#ff784a', glowColor: '18 100 64', glowSecondary: '#ffba55' },
   { number: '04', title: '压缩器', english: 'MEDIA COMPRESSOR', description: '批量压缩 MP4 和 PNG 序列帧', path: '/compress', icon: 'compress', accent: '#36d6ff', glowColor: '191 100 65', glowSecondary: '#5a8cff' },
+  { number: '05', title: '智能抠像', english: 'CHROMA KEYER', description: '一键抠除绿幕或指定颜色背景', path: '/keyer', icon: 'keyer', accent: '#45ffc7', glowColor: '162 100 64', glowSecondary: '#45a3ff' },
 ]
 
 const currentTheme = ref('dark')
@@ -144,6 +146,10 @@ const currentModule = computed(() => modules.find(module => module.path === rout
 const workspaceOpen = ref(route.path !== '/')
 const modulesSection = ref(null)
 const modulesTrack = ref(null)
+
+watch(() => route.path, path => {
+  if (path !== '/') workspaceOpen.value = true
+})
 
 function setTheme(theme) { currentTheme.value = theme }
 function navigate(path) { router.push(path) }

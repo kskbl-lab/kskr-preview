@@ -5,6 +5,7 @@ import PluginPreview   from './views/PluginPreview.vue'
 import VideoConverter  from './views/VideoConverter.vue'
 import PngCropper      from './views/PngCropper.vue'
 import Compressor      from './views/Compressor.vue'
+import ChromaKeyer     from './views/ChromaKeyer.vue'
 import './style.css'
 
 const routes = [
@@ -12,6 +13,7 @@ const routes = [
   { path: '/convert', component: VideoConverter },
   { path: '/png-crop', component: PngCropper    },
   { path: '/compress', component: Compressor    },
+  { path: '/keyer',    component: ChromaKeyer   },
 ]
 
 const router = createRouter({
